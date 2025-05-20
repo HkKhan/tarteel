@@ -56,7 +56,7 @@ export function AuthForm() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -66,8 +66,14 @@ export function AuthForm() {
         return
       }
 
+      console.log("Sign in successful:", data)
+      
+      // Use a local storage approach instead of cookies
+      localStorage.setItem('auth_user', JSON.stringify(data.user))
+      localStorage.setItem('auth_session', JSON.stringify(data.session))
+      
+      // Navigate without refresh to prevent state loss
       router.push("/dashboard")
-      router.refresh()
     } catch (err) {
       console.error("Error during sign in:", err)
       setError("An unexpected error occurred")

@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
@@ -8,11 +7,19 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code")
 
   if (code) {
-    const cookieStore = cookies()
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
-    await supabase.auth.exchangeCodeForSession(code)
+    const supabase = createClient()
+    // Process the auth code
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    
+    if (!error && data.session && data.user) {
+      // Redirect to a page that will set localStorage via client-side script
+      return NextResponse.redirect(
+        new URL(`/auth/set-session?session=${encodeURIComponent(JSON.stringify(data.session))}&user=${encodeURIComponent(JSON.stringify(data.user))}`, 
+        request.url)
+      )
+    }
   }
 
-  // URL to redirect to after sign in process completes
+  // Fallback redirect if something goes wrong
   return NextResponse.redirect(new URL("/dashboard", request.url))
 }

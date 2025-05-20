@@ -1,21 +1,15 @@
-import type React from "react"
-import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+"use client"
 
-export default async function DashboardLayout({
+import { useEffect } from "react"
+import { useRouter } from "next/navigation" 
+import type React from "react"
+
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = createClient()
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    redirect("/auth/signin")
-  }
-
+  // Client-side auth check happens in the page components
+  // This layout no longer performs server-side auth checks
   return <div className="flex min-h-screen flex-col">{children}</div>
 }

@@ -2,14 +2,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Mic, Play, CheckCircle, ArrowRight } from "lucide-react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
-import { AuthButton } from "@/components/auth/auth-button"
 
-export default async function Home() {
-  const supabase = createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+export default function Home() {
+  // Simplified version without cookie-based auth check
+  const isLoggedIn = false
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -33,7 +29,17 @@ export default async function Home() {
               About
             </Link>
           </nav>
-          <AuthButton user={session?.user || null} />
+          <div className="flex items-center gap-3">
+            <Button variant="outline" asChild>
+              <Link href="/try">Try Without Login</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/auth/signin">Sign In</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild className="text-xs">
+              <Link href="/api/setup-storage">Setup Storage</Link>
+            </Button>
+          </div>
         </div>
       </header>
       <main className="flex-1">
@@ -55,7 +61,7 @@ export default async function Home() {
                     size="icon"
                     asChild
                   >
-                    <Link href={session ? "/record" : "/auth/signin"}>
+                    <Link href={isLoggedIn ? "/record" : "/try"}>
                       <Mic className="h-10 w-10" />
                       <span className="sr-only">Record Recitation</span>
                     </Link>
@@ -152,11 +158,15 @@ export default async function Home() {
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Button className="bg-emerald-600 hover:bg-emerald-700" asChild>
-                    <Link href={session ? "/record" : "/auth/signin"}>
+                    <Link href={isLoggedIn ? "/record" : "/try"}>
                       Try Now <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
-                  <Button variant="outline">Learn More</Button>
+                  <Button variant="outline" asChild>
+                    <Link href="/try">
+                      Try Without Login
+                    </Link>
+                  </Button>
                 </div>
               </div>
               <div className="flex items-center justify-center">

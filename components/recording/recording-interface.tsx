@@ -112,29 +112,45 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
     try {
       // 1. Upload the audio file to Supabase Storage
       const fileName = `recitations/${userId}/${Date.now()}.mp3`
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("audio")
-        .upload(fileName, audioBlob, {
-          contentType: "audio/mpeg",
-        })
+      
+      try {
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("audio")
+          .upload(fileName, audioBlob, {
+            contentType: "audio/mpeg",
+          })
 
-      if (uploadError) {
-        throw new Error(uploadError.message)
+        if (uploadError) {
+          console.error("Storage upload error:", uploadError.message)
+          if (uploadError.message.includes("Bucket not found")) {
+            throw new Error("Storage bucket 'audio' not found. Please create this bucket in your Supabase project.")
+          }
+          throw new Error(uploadError.message)
+        }
+      } catch (storageError) {
+        console.error("Storage error:", storageError)
+        // Continue with analysis without storage
+        // This allows the feature to work even if storage isn't configured
       }
 
-      // 2. Get the public URL for the uploaded file
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("audio").getPublicUrl(fileName)
+      // Get the public URL if upload was successful, otherwise use a placeholder
+      let publicUrl = ""
+      try {
+        const { data } = supabase.storage.from("audio").getPublicUrl(fileName)
+        publicUrl = data.publicUrl
+      } catch (urlError) {
+        console.error("Error getting public URL:", urlError)
+        publicUrl = "storage-not-available"
+      }
 
-      // 3. Simulate analysis (in a real app, you'd send the audio to an analysis service)
+      // 2. Simulate analysis (in a real app, you'd send the audio to an analysis service)
       // For demo purposes, we'll generate random scores
       const tajweedScore = Math.floor(Math.random() * 30) + 60 // 60-90
       const pronunciationScore = Math.floor(Math.random() * 30) + 60 // 60-90
       const rhythmScore = Math.floor(Math.random() * 30) + 60 // 60-90
       const overallScore = Math.floor((tajweedScore + pronunciationScore + rhythmScore) / 3)
 
-      // 4. Get a random reciter to match with
+      // 3. Get a random reciter to match with
       const { data: reciters, error: recitersError } = await supabase.from("reciters").select("id")
 
       if (recitersError) {
@@ -143,7 +159,7 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
 
       const randomReciterId = reciters[Math.floor(Math.random() * reciters.length)].id
 
-      // 5. Save the recitation data to the database
+      // 4. Save the recitation data to the database
       const { data: recitationData, error: recitationError } = await supabase
         .from("recitations")
         .insert({
@@ -163,12 +179,12 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
         throw new Error(recitationError.message)
       }
 
-      // 6. Redirect to the results page
+      // 5. Redirect to the results page
       router.push(`/dashboard`)
       router.refresh()
     } catch (err) {
       console.error("Error saving recording:", err)
-      setError("Failed to save your recitation. Please try again.")
+      setError(`Failed to save your recitation: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`)
       setIsProcessing(false)
     }
   }

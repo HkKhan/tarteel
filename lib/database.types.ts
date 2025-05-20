@@ -39,6 +39,8 @@ export interface Database {
           image_url: string | null
           sample_audio_url: string | null
           created_at: string
+          profile_image_url: string | null
+          feature_vector: Json | null
         }
         Insert: {
           id?: string
@@ -49,6 +51,8 @@ export interface Database {
           image_url?: string | null
           sample_audio_url?: string | null
           created_at?: string
+          profile_image_url?: string | null
+          feature_vector?: Json | null
         }
         Update: {
           id?: string
@@ -59,6 +63,8 @@ export interface Database {
           image_url?: string | null
           sample_audio_url?: string | null
           created_at?: string
+          profile_image_url?: string | null
+          feature_vector?: Json | null
         }
       }
       recitations: {
