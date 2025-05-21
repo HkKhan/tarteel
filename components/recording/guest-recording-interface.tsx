@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Mic, Save, Trash2, Loader2 } from "lucide-react"
+import { Mic, Save, Trash2, Loader2, Upload } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { processRecitation } from "@/lib/audio/recorder"
 
 // Define the types for our feedback and match results
 interface AspectFeedback {
@@ -40,6 +41,7 @@ export default function GuestRecordingInterface() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -102,6 +104,33 @@ export default function GuestRecordingInterface() {
     }
   }
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Check if file is an audio file
+    if (!file.type.startsWith("audio/")) {
+      setError("Please upload an audio file (mp3 or wav).")
+      return
+    }
+
+    // Check file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setError("File is too large. Maximum size is 10MB.")
+      return
+    }
+
+    // Create a URL for the audio file
+    const url = URL.createObjectURL(file)
+    setAudioBlob(file)
+    setAudioUrl(url)
+    setActiveTab("preview")
+  }
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click()
+  }
+
   const resetRecording = () => {
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl)
@@ -113,6 +142,11 @@ export default function GuestRecordingInterface() {
     setMatchResults([])
     setFeedback(null)
     setError(null)
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const formatTime = (seconds: number) => {
@@ -121,54 +155,39 @@ export default function GuestRecordingInterface() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
   }
 
-  const processRecording = async () => {
+  const processRecordingHandler = async () => {
     if (!audioBlob) return
 
     setIsProcessing(true)
     setError(null)
 
     try {
-      // Create form data with the audio blob
-      const formData = new FormData()
-      formData.append('audio', audioBlob)
-      
-      // Send directly to the reciter-match API
-      const matchResponse = await fetch('/api/reciter-match', {
-        method: 'POST',
-        body: formData
-      })
-      
-      if (!matchResponse.ok) {
-        throw new Error('Failed to match reciter')
-      }
-      
-      const responseData = await matchResponse.json()
+      // Use our new utility function to process the recording
+      const responseData = await processRecitation(audioBlob);
       
       // Update the state with the results
       if (responseData.bestMatch && responseData.matchResults) {
-        setMatchResults(responseData.matchResults.map((match: any) => ({
-          reciterId: match.reciterId,
-          reciterName: match.reciterName,
-          reciterImageUrl: null,
-          recitationStyle: match.style,
-          similarityScore: match.similarityScore,
-          aspectScores: match.aspectScores
-        })))
+        setMatchResults(responseData.matchResults);
+        
+        // Create simple feedback object format based on match results
+        const specificFeedback: Record<string, AspectFeedback> = {};
+        Object.entries(responseData.bestMatch.aspectScores || {}).forEach(([aspect, score]) => {
+          specificFeedback[aspect] = { 
+            score: Number(score),
+            advice: `Your ${aspect} is ${Number(score) > 0.7 ? 'good' : 'needs improvement'}`
+          };
+        });
         
         setFeedback({
           general: responseData.generalFeedback || [],
-          specific: Object.fromEntries(
-            Object.entries(responseData.bestMatch.justifications || {}).map(
-              ([aspect, advice]) => [aspect, { score: responseData.bestMatch.aspectScores[aspect], advice: advice as string }]
-            )
-          )
-        })
+          specific: specificFeedback
+        });
       } else {
-        throw new Error('Invalid response format from server')
+        throw new Error('Invalid response format from server');
       }
       
       // Switch to the results tab
-      setActiveTab("results")
+      setActiveTab("results");
     } catch (err) {
       console.error("Error processing recording:", err)
       setError("Failed to process your recitation. Please try again.")
@@ -202,27 +221,57 @@ export default function GuestRecordingInterface() {
           <div className="flex flex-col items-center justify-center space-y-8">
             <div className="text-center">
               <p className="text-lg font-medium mb-2">Recite Surah Al-Fatiha</p>
-              <p className="text-sm text-muted-foreground">Press the microphone button to start recording</p>
+              <p className="text-sm text-muted-foreground">Record your voice or upload an audio file</p>
             </div>
 
-            <div className="relative">
-              <Button
-                className={`h-32 w-32 rounded-full ${
-                  isRecording ? "bg-red-500 hover:bg-red-600 animate-pulse" : "bg-emerald-600 hover:bg-emerald-700"
-                }`}
-                onClick={isRecording ? stopRecording : startRecording}
-                disabled={isProcessing}
-              >
-                <Mic className="h-12 w-12" />
-              </Button>
-              {isRecording && (
-                <div className="absolute -bottom-8 left-0 right-0 text-center">
-                  <span className="text-sm font-medium">{formatTime(recordingTime)}</span>
-                </div>
-              )}
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/mp3,audio/wav,audio/mpeg"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+              {/* Recording button */}
+              <div className="relative flex flex-col items-center">
+                <Button
+                  className={`h-32 w-32 rounded-full ${
+                    isRecording ? "bg-red-500 hover:bg-red-600 animate-pulse" : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={isProcessing}
+                >
+                  <Mic className="h-12 w-12" />
+                </Button>
+                {isRecording && (
+                  <div className="absolute top-32 w-full text-center">
+                    <span className="text-sm font-medium">{formatTime(recordingTime)}</span>
+                  </div>
+                )}
+                <p className="text-center mt-4">Record</p>
+              </div>
+
+              {/* Or divider */}
+              <div className="text-muted-foreground text-lg font-medium px-4">
+                OR
+              </div>
+
+              {/* Upload button */}
+              <div className="relative flex flex-col items-center">
+                <Button
+                  className="h-32 w-32 rounded-full bg-blue-600 hover:bg-blue-700"
+                  onClick={triggerFileUpload}
+                  disabled={isProcessing || isRecording}
+                >
+                  <Upload className="h-12 w-12" />
+                </Button>
+                <p className="text-center mt-4">Upload Audio</p>
+              </div>
             </div>
 
-            {isRecording && <p className="text-red-500 animate-pulse">Recording...</p>}
+            {isRecording && <p className="text-red-500 animate-pulse mt-4">Recording...</p>}
           </div>
         </TabsContent>
 
@@ -239,7 +288,7 @@ export default function GuestRecordingInterface() {
                   Discard
                 </Button>
 
-                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={processRecording} disabled={isProcessing}>
+                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={processRecordingHandler} disabled={isProcessing}>
                   {isProcessing ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -248,7 +297,7 @@ export default function GuestRecordingInterface() {
                   ) : (
                     <>
                       <Save className="mr-2 h-4 w-4" />
-                      Analyze
+                      Analyze Recitation
                     </>
                   )}
                 </Button>
@@ -258,68 +307,68 @@ export default function GuestRecordingInterface() {
         </TabsContent>
 
         <TabsContent value="results" className="pt-6">
-          {matchResults.length > 0 && feedback && (
+          {matchResults.length > 0 && (
             <div className="space-y-8">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold mb-2">Your Voice Analysis</h2>
-                <p className="text-muted-foreground">Here's how your recitation compares to classical reciters</p>
+              {/* Best Match Section */}
+              <div className="bg-green-50 p-6 rounded-lg border border-green-200">
+                <h3 className="text-xl font-semibold text-green-800 mb-4">Best Match</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">{matchResults[0].reciterName}</span>
+                    <span className="font-semibold text-green-600">
+                      {Math.round(matchResults[0].similarityScore)}% match
+                    </span>
+                  </div>
+                  <Progress value={matchResults[0].similarityScore} className="h-2" />
+                  {matchResults[0].recitationStyle && (
+                    <p className="text-sm text-gray-600">Style: {matchResults[0].recitationStyle}</p>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-6">
-                <h3 className="text-xl font-semibold">Top Matches</h3>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {matchResults.map((match, index) => (
-                    <div key={match.reciterId} className="border rounded-lg p-4 bg-card">
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <div className="font-bold">{index + 1}. {match.reciterName}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {match.recitationStyle} style
-                        </div>
-                        <div className="mt-2">
-                          <span className="text-2xl font-bold text-emerald-600">
-                            {Math.round(match.similarityScore)}%
+              {/* Feedback Section */}
+              {feedback && (
+                <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
+                  <h3 className="text-xl font-semibold text-blue-800 mb-4">Feedback</h3>
+                  <ul className="list-disc pl-5 space-y-2">
+                    {feedback.general.map((item, idx) => (
+                      <li key={idx} className="text-blue-700">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Other Matches Section */}
+              {matchResults.length > 1 && (
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">Other Close Matches</h3>
+                  <div className="space-y-4">
+                    {matchResults.slice(1).map((match) => (
+                      <div key={match.reciterId} className="bg-gray-50 p-4 rounded-lg border">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">{match.reciterName}</span>
+                          <span className="font-semibold text-gray-600">
+                            {Math.round(match.similarityScore)}% match
                           </span>
-                          <span className="text-sm text-muted-foreground"> match</span>
                         </div>
+                        <Progress value={match.similarityScore} className="h-2 mt-2" />
+                        {match.recitationStyle && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            Style: {match.recitationStyle}
+                          </p>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold">General Feedback</h3>
-                <ul className="space-y-2">
-                  {feedback.general.map((item, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <div className="mt-1 h-2 w-2 rounded-full bg-emerald-600" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="space-y-6">
-                <h3 className="text-xl font-semibold">Tajweed Aspect Analysis</h3>
-                <div className="grid gap-6 md:grid-cols-2">
-                  {Object.entries(feedback.specific).map(([aspect, { score, advice }]) => (
-                    <div key={aspect} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-lg font-medium capitalize">{aspect}</h4>
-                        <span className="text-sm font-bold">
-                          {Math.round(score)}%
-                        </span>
-                      </div>
-                      <Progress value={score} className="h-2 mb-4" />
-                      <p className="text-sm text-muted-foreground">{advice}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-center pt-4">
-                <Button onClick={resetRecording} className="bg-emerald-600 hover:bg-emerald-700">
-                  Try Again
+              {/* Action Button */}
+              <div className="flex justify-center">
+                <Button variant="outline" onClick={resetRecording}>
+                  Record Again
                 </Button>
               </div>
             </div>
@@ -327,5 +376,5 @@ export default function GuestRecordingInterface() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 } 

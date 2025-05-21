@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "app/api/process-recitation/route.py": {
+      "runtime": "vercel-python@0.7.0",
+      "memory": 1024
+    },
+    "app/api/new-reciter-py/route.py": {
+      "runtime": "vercel-python@0.7.0",
+      "memory": 1024
+    }
+  },
+  "routes": [
+    { "src": "/api/process-recitation", "dest": "/api/process-recitation/route.py" },
+    { "src": "/api/new-reciter-py", "dest": "/api/new-reciter-py/route.py" }
+  ]
+} 

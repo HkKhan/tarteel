@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       // Create a promise that will resolve with the features or reject after timeout
       const featureExtractionPromise = extractAudioFeatures(audioBuffer);
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Audio processing timed out after 45 seconds')), 45000);
+        setTimeout(() => reject(new Error('Audio processing timed out after 180 seconds')), 180000);
       });
       
       // Race the promises
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       await supabase.storage.from("audio").remove([fileName]);
       
       return NextResponse.json(
-        { error: `Failed to process audio: ${featureError.message || 'Unknown error during feature extraction'}` },
+        { error: `Failed to process audio: ${featureError.message || 'Unknown error during feature extraction'}. Please try with a shorter audio clip or contact support.` },
         { status: 500 }
       );
     }

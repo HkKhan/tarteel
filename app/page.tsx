@@ -57,19 +57,19 @@ export default function Home() {
                   Receive personalized feedback by matching your voice to classical reciters.
                 </p>
               </div>
-              <div className="mx-auto w-full max-w-sm space-y-2">
-                <div className="flex flex-col items-center justify-center space-y-2">
+              <div className="mx-auto w-full max-w-sm space-y-4 my-10">
+                <div className="flex flex-col items-center justify-center space-y-4">
                   <Button
-                    className="h-24 w-24 rounded-full bg-emerald-600 hover:bg-emerald-700 shadow-lg transition-all hover:scale-105"
+                    className="h-32 w-32 rounded-full bg-emerald-600 hover:bg-emerald-700 shadow-lg transition-all hover:scale-105"
                     size="icon"
                     asChild
                   >
                     <Link href={isLoggedIn ? "/record" : "/try"}>
-                      <Mic className="h-10 w-10" />
+                      <Mic className="h-14 w-14" />
                       <span className="sr-only">Record Recitation</span>
                     </Link>
                   </Button>
-                  <p className="text-sm text-muted-foreground">Record Surah Al-Fatiha to get started</p>
+                  <p className="text-md font-medium text-center">Record Surah Al-Fatiha to get started</p>
                 </div>
               </div>
             </div>

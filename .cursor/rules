@@ -63,7 +63,7 @@ return response
 3. You MUST NEVER use `get`, `set`, or `remove`
 4. You MUST NEVER import from `@supabase/auth-helpers-nextjs`
 5. An explanation of the application is at summary.md. Update the summary.md file with the latest changes if necessary (if the changes cause the application to deviate from the summary.md file or a new major component is added).
-
+6. Whenever installing node packages use --legacy-peer-deps flag.
 ## CORRECT BROWSER CLIENT IMPLEMENTATION
 
 ```typescript
