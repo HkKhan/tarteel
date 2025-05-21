@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect } from "react"
+import { Suspense, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
-export default function SetSessionPage() {
+function SetSessionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -29,5 +29,17 @@ export default function SetSessionPage() {
     <div className="flex min-h-screen items-center justify-center">
       <p>Setting up your session...</p>
     </div>
+  )
+}
+
+export default function SetSessionPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    }>
+      <SetSessionContent />
+    </Suspense>
   )
 } 

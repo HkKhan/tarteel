@@ -128,39 +128,44 @@ export default function GuestRecordingInterface() {
     setError(null)
 
     try {
-      // 1. Process the audio to extract features
+      // Create form data with the audio blob
       const formData = new FormData()
       formData.append('audio', audioBlob)
       
-      const processResponse = await fetch('/api/process-audio', {
-        method: 'POST',
-        body: formData
-      })
-      
-      if (!processResponse.ok) {
-        throw new Error('Failed to process audio')
-      }
-      
-      const { featureVector } = await processResponse.json()
-      
-      // 2. Send the feature vector to the reciter-match API
+      // Send directly to the reciter-match API
       const matchResponse = await fetch('/api/reciter-match', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ featureVector })
+        body: formData
       })
       
       if (!matchResponse.ok) {
         throw new Error('Failed to match reciter')
       }
       
-      const { matches, feedback } = await matchResponse.json()
+      const responseData = await matchResponse.json()
       
       // Update the state with the results
-      setMatchResults(matches)
-      setFeedback(feedback)
+      if (responseData.bestMatch && responseData.matchResults) {
+        setMatchResults(responseData.matchResults.map((match: any) => ({
+          reciterId: match.reciterId,
+          reciterName: match.reciterName,
+          reciterImageUrl: null,
+          recitationStyle: match.style,
+          similarityScore: match.similarityScore,
+          aspectScores: match.aspectScores
+        })))
+        
+        setFeedback({
+          general: responseData.generalFeedback || [],
+          specific: Object.fromEntries(
+            Object.entries(responseData.bestMatch.justifications || {}).map(
+              ([aspect, advice]) => [aspect, { score: responseData.bestMatch.aspectScores[aspect], advice: advice as string }]
+            )
+          )
+        })
+      } else {
+        throw new Error('Invalid response format from server')
+      }
       
       // Switch to the results tab
       setActiveTab("results")

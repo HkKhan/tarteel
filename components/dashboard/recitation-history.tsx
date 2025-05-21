@@ -20,7 +20,6 @@ interface Recitation {
   audio_url: string | null
   reciters: {
     name: string
-    image_url: string | null
   } | null
 }
 
@@ -70,7 +69,6 @@ export default function RecitationHistory({ recitations }: RecitationHistoryProp
                   {recitation.reciters && (
                     <>
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={recitation.reciters.image_url || undefined} alt={recitation.reciters.name} />
                         <AvatarFallback>{recitation.reciters.name[0]}</AvatarFallback>
                       </Avatar>
                       <span className="text-sm">{recitation.reciters.name}</span>
@@ -119,7 +117,6 @@ export default function RecitationHistory({ recitations }: RecitationHistoryProp
                   <div className="flex items-center gap-2">
                     <Avatar className="h-8 w-8">
                       <AvatarImage
-                        src={selectedRecitation.reciters.image_url || undefined}
                         alt={selectedRecitation.reciters.name}
                       />
                       <AvatarFallback>{selectedRecitation.reciters.name[0]}</AvatarFallback>

@@ -1,24 +1,80 @@
 /**
  * Script to extract real MFCC features from reciter audio files and update the database
- * Run with: npx ts-node scripts/extract-real-features.ts - sometimes it doesn't work so need to mv to .js then run
+ * Run with: node --experimental-modules extract-real-features.js
  */
 
-import fs from 'fs';
-import path from 'path';
-import { createClient } from '@supabase/supabase-js';
-import Meyda from 'meyda';
-import * as mm from 'music-metadata';
+// Load environment variables from .env file
+const fs = require('fs');
+const path = require('path');
 
-// Load audio files (using Node's FileSystem)
-async function loadAudioBuffer(filePath: string): Promise<{ buffer: Buffer, format: mm.IAudioMetadata }> {
+// Load environment variables from .env file
+try {
+  const dotenv = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+  const lines = dotenv.split('\n');
+  
+  for (const line of lines) {
+    // Skip empty lines or comments
+    if (!line || line.trim().startsWith('#')) continue;
+    
+    // Split by the first equals sign
+    const parts = line.split('=');
+    if (parts.length >= 2) {
+      const key = parts[0].trim();
+      // Join the rest back together in case the value contains = signs
+      const value = parts.slice(1).join('=').trim();
+      if (key && value) {
+        process.env[key] = value;
+        // console.log(`Loaded env var: ${key}=${value}`);
+      }
+    }
+  }
+  console.log('Loaded environment variables from .env file');
+} catch (error) {
+  console.warn('Failed to load .env file:', error.message);
+}
+
+const { createClient } = require('@supabase/supabase-js');
+const Meyda = require('meyda');
+// We'll use dynamic import for music-metadata
+// This function will be used to dynamically import music-metadata when needed
+async function parseAudioMetadata(buffer) {
+  try {
+    // Import music-metadata dynamically
+    const { parseBuffer } = await import('music-metadata');
+    return await parseBuffer(buffer);
+  } catch (error) {
+    console.error('Error importing or using music-metadata:', error);
+    throw error;
+  }
+}
+
+// Type definitions for easier conversion
+/**
+ * @typedef {Object} AudioMetadata
+ * @property {Object} format
+ * @property {number} [format.sampleRate]
+ * @property {number} [format.numberOfChannels]
+ * @property {number} [format.duration]
+ */
+
+/**
+ * @param {string} filePath
+ * @returns {Promise<{buffer: Buffer, format: AudioMetadata}>}
+ */
+async function loadAudioBuffer(filePath) {
   const buffer = fs.readFileSync(filePath);
-  const metadata = await mm.parseBuffer(buffer);
+  const metadata = await parseAudioMetadata(buffer);
   return { buffer, format: metadata };
 }
 
-// Helper function to convert an audio buffer to a mono Float32Array
-async function convertAudioBufferToFloat32Array(audioBuffer: Buffer, metadata: mm.IAudioMetadata): Promise<Float32Array> {
-  // console.log('[convertAudioBufferToFloat32Array] Started.');
+/**
+ * Helper function to convert an audio buffer to a mono Float32Array
+ * @param {Buffer} audioBuffer 
+ * @param {AudioMetadata} metadata 
+ * @returns {Promise<Float32Array>}
+ */
+async function convertAudioBufferToFloat32Array(audioBuffer, metadata) {
+  console.log('[convertAudioBufferToFloat32Array] Started.');
   // Ensure the buffer has an even length for Int16Array processing if needed,
   // though for MP3s, the structure is more complex than raw PCM.
   // This part assumes the buffer can be naively interpreted, which is an approximation.
@@ -32,6 +88,8 @@ async function convertAudioBufferToFloat32Array(audioBuffer: Buffer, metadata: m
   
   const numberOfChannels = metadata.format.numberOfChannels || 1;
   const samplesPerChannel = Math.floor(int16View.length / numberOfChannels);
+  
+  console.log(`[convertAudioBufferToFloat32Array] Audio properties: ${metadata.format.sampleRate}Hz, ${numberOfChannels} channels.`);
   
   const floatData = new Float32Array(samplesPerChannel);
 
@@ -47,36 +105,38 @@ async function convertAudioBufferToFloat32Array(audioBuffer: Buffer, metadata: m
       }
       floatData[i] = (sum / numberOfChannels) / 32768.0; // Normalize
     }
-    // console.log(`[convertAudioBufferToFloat32Array] Converted ${numberOfChannels}-channel audio to mono by averaging channels. Output samples: ${floatData.length}`);
+    console.log(`[convertAudioBufferToFloat32Array] Converted ${numberOfChannels}-channel audio to mono by averaging channels. Output samples: ${floatData.length}`);
   }
-  // console.log('[convertAudioBufferToFloat32Array] Finished.');
+  console.log('[convertAudioBufferToFloat32Array] Finished.');
   return floatData;
 }
 
-// Core reusable MFCC extraction logic from a Float32Array
-async function extractMFCCFromFloat32Array(
-  concatenatedFloatData: Float32Array,
-  sampleRate: number,
-): Promise<number[][]> {
-  // console.log(`[extractMFCCFromFloat32Array] Started. Sample rate: ${sampleRate}, Total samples: ${concatenatedFloatData.length}`);
+/**
+ * Core reusable MFCC extraction logic from a Float32Array
+ * @param {Float32Array} concatenatedFloatData 
+ * @param {number} sampleRate 
+ * @returns {Promise<number[][]>}
+ */
+async function extractMFCCFromFloat32Array(concatenatedFloatData, sampleRate) {
+  console.log(`[extractMFCCFromFloat32Array] Started. Sample rate: ${sampleRate}, Total samples: ${concatenatedFloatData.length}`);
   try {
-    // console.log(`Processing audio: ${sampleRate}Hz, total samples: ${concatenatedFloatData.length}`);
+    console.log(`Processing audio: ${sampleRate}Hz, total samples: ${concatenatedFloatData.length}`);
 
     const frameSize = 1024; // Meyda's default bufferSize
     const hopSize = 512;    // Common hop size (half of frameSize)
 
     // Configure Meyda
     // Meyda needs a sampleRate; this is how you provide it in Node without a full Web Audio API
-    Meyda.audioContext = ({ sampleRate } as unknown as AudioContext);
+    Meyda.audioContext = { sampleRate };
     Meyda.bufferSize = frameSize;
     Meyda.numberOfMFCCCoefficients = 13;
     // Meyda.hopSize is not a direct setting for extract, manual iteration handles hops.
 
-    const mfccs: number[][] = [];
+    const mfccs = [];
     // Calculate total frames based on hop size
     const frameCount = Math.floor((concatenatedFloatData.length - frameSize) / hopSize) + 1;
     
-    // console.log(`[extractMFCCFromFloat32Array] Processing ${frameCount} frames of audio data for MFCC extraction.`);
+    console.log(`[extractMFCCFromFloat32Array] Processing ${frameCount} frames of audio data for MFCC extraction.`);
     
     for (let i = 0; i < frameCount; i++) {
       const startIndex = i * hopSize;
@@ -94,7 +154,7 @@ async function extractMFCCFromFloat32Array(
         if (features && Array.isArray(features.mfcc) && features.mfcc.every(val => !isNaN(val))) {
           mfccs.push(features.mfcc);
         } else if (features && features.mfcc && features.mfcc.some(isNaN)) {
-          // console.warn(`[extractMFCCFromFloat32Array] Frame ${i} produced NaN MFCCs, skipping.`);
+          console.warn(`[extractMFCCFromFloat32Array] Frame ${i} produced NaN MFCCs, skipping.`);
         }
       } catch (err) {
         console.error(`[extractMFCCFromFloat32Array] Error extracting features from frame ${i}:`, err);
@@ -102,17 +162,17 @@ async function extractMFCCFromFloat32Array(
     }
     
     if (mfccs.length === 0) {
-      // console.warn('Failed to extract any valid MFCC frames. This might be due to very short audio or processing issues.');
+      console.warn('Failed to extract any valid MFCC frames. This might be due to very short audio or processing issues.');
       // Return empty array or handle as error, depending on requirements.
       // For now, let's allow returning empty if no frames are good.
       // throw new Error('Failed to extract any MFCC frames');
     }
     
-    // console.log(`[extractMFCCFromFloat32Array] Successfully extracted ${mfccs.length} MFCC frames.`);
+    console.log(`[extractMFCCFromFloat32Array] Successfully extracted ${mfccs.length} MFCC frames.`);
     
     // Return only the MFCCs (max 300 frames to limit size)
     const result = mfccs.length > 300 ? mfccs.slice(0, 300) : mfccs;
-    // console.log(`[extractMFCCFromFloat32Array] Finished. Returning ${result.length} frames.`);
+    console.log(`[extractMFCCFromFloat32Array] Finished. Returning ${result.length} frames.`);
     return result;
   } catch (err) {
     console.error('[extractMFCCFromFloat32Array] Error in MFCC extraction from Float32Array:', err);
@@ -120,11 +180,15 @@ async function extractMFCCFromFloat32Array(
   }
 }
 
-// Function to load, convert, and concatenate all 7 ayahs of Fatiha for a reciter
-async function getConcatenatedFatihaAudioFeatures(reciterAudioDir: string): Promise<number[][] | null> {
-  // console.log(`[getConcatenatedFatihaAudioFeatures] Started for directory: ${reciterAudioDir}`);
-  const ayahFloatDataParts: Float32Array[] = [];
-  let firstAyahMetadata: mm.IAudioMetadata | null = null;
+/**
+ * Function to load, convert, and concatenate all 7 ayahs of Fatiha for a reciter
+ * @param {string} reciterAudioDir 
+ * @returns {Promise<number[][]|null>}
+ */
+async function getConcatenatedFatihaAudioFeatures(reciterAudioDir) {
+  console.log(`[getConcatenatedFatihaAudioFeatures] Started for directory: ${reciterAudioDir}`);
+  const ayahFloatDataParts = [];
+  let firstAyahMetadata = null;
   let totalSamples = 0;
   let actualAyahsProcessed = 0;
 
@@ -140,11 +204,11 @@ async function getConcatenatedFatihaAudioFeatures(reciterAudioDir: string): Prom
     }
 
     try {
-      // console.log(`[getConcatenatedFatihaAudioFeatures] Processing ${audioFilePath}`);
+      console.log(`[getConcatenatedFatihaAudioFeatures] Processing ${audioFilePath}`);
       const audioBuffer = fs.readFileSync(audioFilePath);
-      // console.log(`[getConcatenatedFatihaAudioFeatures] Read ${audioFilePath}, buffer length: ${audioBuffer.length}`);
-      const metadata = await mm.parseBuffer(audioBuffer);
-      // console.log(`[getConcatenatedFatihaAudioFeatures] Parsed metadata for ${audioFilePath}: SR=${metadata.format.sampleRate}, Channels=${metadata.format.numberOfChannels}, Duration=${metadata.format.duration}s`);
+      console.log(`[getConcatenatedFatihaAudioFeatures] Read ${audioFilePath}, buffer length: ${audioBuffer.length}`);
+      const metadata = await parseAudioMetadata(audioBuffer);
+      console.log(`[getConcatenatedFatihaAudioFeatures] Parsed metadata for ${audioFilePath}: SR=${metadata.format.sampleRate}, Channels=${metadata.format.numberOfChannels}, Duration=${metadata.format.duration}s`);
 
       if (!metadata.format.sampleRate) {
         console.warn(`[getConcatenatedFatihaAudioFeatures] Missing sample rate for ${audioFilePath}, skipping this ayah.`);
@@ -158,18 +222,18 @@ async function getConcatenatedFatihaAudioFeatures(reciterAudioDir: string): Prom
             console.warn(`[getConcatenatedFatihaAudioFeatures] Sample rate mismatch in ${reciterAudioDir}. Ayah ${ayahFileName} has ${metadata.format.sampleRate}Hz vs first ayah's ${firstAyahMetadata.format.sampleRate}Hz. Sticking to first ayah's rate for consistency.`);
         }
         if (firstAyahMetadata.format.numberOfChannels !== metadata.format.numberOfChannels) {
-            // console.log(`Channel count mismatch for ${ayahFileName}. This is handled by mono conversion.`);
+            console.log(`Channel count mismatch for ${ayahFileName}. This is handled by mono conversion.`);
         }
       }
       
       const floatData = await convertAudioBufferToFloat32Array(audioBuffer, metadata);
-      // console.log(`[getConcatenatedFatihaAudioFeatures] Converted ${audioFilePath} to Float32Array, length: ${floatData.length}`);
+      console.log(`[getConcatenatedFatihaAudioFeatures] Converted ${audioFilePath} to Float32Array, length: ${floatData.length}`);
       if (floatData.length > 0) {
         ayahFloatDataParts.push(floatData);
         totalSamples += floatData.length;
         actualAyahsProcessed++;
       } else {
-        // console.warn(`[getConcatenatedFatihaAudioFeatures] Processed floatData for ${audioFilePath} is empty, skipping.`);
+        console.warn(`[getConcatenatedFatihaAudioFeatures] Processed floatData for ${audioFilePath} is empty, skipping.`);
       }
 
     } catch (error) {
@@ -181,7 +245,7 @@ async function getConcatenatedFatihaAudioFeatures(reciterAudioDir: string): Prom
 
   if (ayahFloatDataParts.length === 0 || !firstAyahMetadata || actualAyahsProcessed === 0) {
     console.warn(`[getConcatenatedFatihaAudioFeatures] No valid audio data processed for reciter in ${reciterAudioDir}. Skipping this reciter.`);
-    // console.log(`[getConcatenatedFatihaAudioFeatures] Finished early due to no valid audio data.`);
+    console.log(`[getConcatenatedFatihaAudioFeatures] Finished early due to no valid audio data.`);
     return null;
   }
   
@@ -196,22 +260,26 @@ async function getConcatenatedFatihaAudioFeatures(reciterAudioDir: string): Prom
   }
   
   // Use sample rate from the first successfully processed ayah's metadata
-  const sampleRate = firstAyahMetadata.format.sampleRate as number; 
+  const sampleRate = firstAyahMetadata.format.sampleRate; 
 
   if (concatenatedFloatData.length < 1024) { // Ensure there's enough data for at least one frame
       console.warn(`[getConcatenatedFatihaAudioFeatures] Concatenated audio data for ${reciterAudioDir} is too short (${concatenatedFloatData.length} samples). Skipping MFCC extraction.`);
-      // console.log(`[getConcatenatedFatihaAudioFeatures] Finished. Returning empty array due to short audio.`);
+      console.log(`[getConcatenatedFatihaAudioFeatures] Finished. Returning empty array due to short audio.`);
       return []; // Return empty array, as no features can be extracted.
   }
 
-  // console.log(`[getConcatenatedFatihaAudioFeatures] Calling extractMFCCFromFloat32Array for ${reciterAudioDir}`);
+  console.log(`[getConcatenatedFatihaAudioFeatures] Calling extractMFCCFromFloat32Array for ${reciterAudioDir}`);
   const features = await extractMFCCFromFloat32Array(concatenatedFloatData, sampleRate);
-  // console.log(`[getConcatenatedFatihaAudioFeatures] Finished for ${reciterAudioDir}. Extracted ${features ? features.length : 'null'} MFCC frames.`);
+  console.log(`[getConcatenatedFatihaAudioFeatures] Finished for ${reciterAudioDir}. Extracted ${features ? features.length : 'null'} MFCC frames.`);
   return features;
 }
 
-// Calculate mean values for each MFCC coefficient across frames
-function calculateMeans(mfccs: number[][]): number[] {
+/**
+ * Calculate mean values for each MFCC coefficient across frames
+ * @param {number[][]} mfccs 
+ * @returns {number[]}
+ */
+function calculateMeans(mfccs) {
   if (mfccs.length === 0) return [];
   
   const numCoefficients = mfccs[0].length;
@@ -226,8 +294,13 @@ function calculateMeans(mfccs: number[][]): number[] {
   return means.map(sum => sum / mfccs.length);
 }
 
-// Calculate standard deviation for each MFCC coefficient across frames
-function calculateStdDevs(mfccs: number[][], means: number[]): number[] {
+/**
+ * Calculate standard deviation for each MFCC coefficient across frames
+ * @param {number[][]} mfccs 
+ * @param {number[]} means 
+ * @returns {number[]}
+ */
+function calculateStdDevs(mfccs, means) {
   if (mfccs.length === 0) return [];
   
   const numCoefficients = mfccs[0].length;
@@ -258,7 +331,7 @@ async function main() {
   console.log('[main] Supabase client initialized.');
   
   // Path to reciter directories (Surah Al-Fatiha recordings)
-  const fatihaDir = path.join(process.cwd(), 'public', 'everyayah_fatiha');
+  const fatihaDir = path.join(process.cwd(), '..', 'public', 'everyayah_fatiha');
   
   // Get all reciter directories
   const reciterDirs = fs.readdirSync(fatihaDir).filter(dir => 
@@ -306,12 +379,19 @@ async function main() {
       
       console.log(`[main] Fetched reciters for '${reciterName}':`, reciters);
 
+      // Determine style based on reciter name
+      const style = reciterName.toLowerCase().includes('warsh') ? 'warsh' : 'hafs and assim';
+      console.log(`[main] Determined style for ${reciterName}: ${style}`);
+
       if (reciters && reciters.length > 0) {
         // Update existing reciter
         console.log(`[main] Updating feature vector for existing reciter ${reciterName} (ID: ${reciters[0].id})`);
         const { error: updateError } = await supabase
           .from('reciters')
-          .update({ feature_vector: featureVector })
+          .update({ 
+            feature_vector: featureVector,
+            style: style 
+          })
           .eq('id', reciters[0].id);
         
         if (updateError) {
@@ -327,7 +407,7 @@ async function main() {
           .insert({
             name: reciterName,
             feature_vector: featureVector,
-            audio_url: `/everyayah_fatiha/${dir}/001001.mp3`
+            style: style
           });
         
         if (insertError) {

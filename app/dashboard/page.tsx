@@ -50,7 +50,6 @@ export default function DashboardPage() {
               *,
               reciters (
                 name,
-                image_url
               )
             `)
             .eq("user_id", parsedUser.id)

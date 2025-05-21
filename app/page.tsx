@@ -25,6 +25,9 @@ export default function Home() {
             <Link href="#" className="text-sm font-medium hover:underline underline-offset-4">
               Reciters
             </Link>
+            <Link href="/new-reciter" className="text-sm font-medium hover:underline underline-offset-4">
+              Add Reciter
+            </Link>
             <Link href="#" className="text-sm font-medium hover:underline underline-offset-4">
               About
             </Link>
