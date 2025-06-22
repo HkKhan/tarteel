@@ -7,8 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 export default function NewReciterPage() {
@@ -16,9 +14,8 @@ export default function NewReciterPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [audioBase64, setAudioBase64] = useState<string | null>(null);
-  const [processingMethod, setProcessingMethod] = useState<'js' | 'python'>('python');
   const [success, setSuccess] = useState(false);
+  const [predictions, setPredictions] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -26,14 +23,6 @@ export default function NewReciterPage() {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       setAudioFile(file);
-      
-      // Convert to base64 for Python method
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setAudioBase64(base64);
-      };
-      reader.readAsDataURL(file);
     }
   };
 
@@ -53,42 +42,18 @@ export default function NewReciterPage() {
     setIsLoading(true);
     setError(null);
     setSuccess(false);
+    setPredictions([]);
     
     try {
-      // Choose API endpoint based on selected method
-      const endpoint = processingMethod === 'python' 
-        ? '/api/new-reciter-py' 
-        : '/api/new-reciter';
+      // Use the new speaker prediction API
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('audio', audioFile);
       
-      let response;
-      
-      if (processingMethod === 'python') {
-        // Use Python processor with enhanced audio fingerprinting
-        if (!audioBase64) {
-          throw new Error('Audio file not properly loaded');
-        }
-        
-        response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name,
-            audio: audioBase64
-          }),
-        });
-      } else {
-        // Use classic JS method
-        const formData = new FormData();
-        formData.append('name', name);
-        formData.append('audio', audioFile);
-        
-        response = await fetch(endpoint, {
-          method: 'POST',
-          body: formData,
-        });
-      }
+      const response = await fetch('/api/new-reciter', {
+        method: 'POST',
+        body: formData,
+      });
       
       const data = await response.json();
       
@@ -98,11 +63,11 @@ export default function NewReciterPage() {
       
       // Success!
       setSuccess(true);
+      setPredictions(data.predictions || []);
       
       // Reset form
       setName('');
       setAudioFile(null);
-      setAudioBase64(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -110,7 +75,7 @@ export default function NewReciterPage() {
       // Redirect to home after a brief delay
       setTimeout(() => {
         router.push('/');
-      }, 2000);
+      }, 3000);
     } catch (err: any) {
       setError(err.message || 'An error occurred');
       console.error('Error creating reciter:', err);
@@ -125,7 +90,7 @@ export default function NewReciterPage() {
         <CardHeader>
           <CardTitle>Create New Reciter</CardTitle>
           <CardDescription>
-            Add a new reciter to the database with enhanced audio fingerprinting
+            Add a new reciter to the database with AI-powered speaker recognition
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -145,6 +110,24 @@ export default function NewReciterPage() {
                 Reciter has been successfully added to the database.
               </AlertDescription>
             </Alert>
+          )}
+
+          {predictions.length > 0 && (
+            <Card className="mb-4 bg-blue-50 border-blue-200">
+              <CardHeader>
+                <CardTitle className="text-lg text-blue-800">Speaker Recognition Results</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {predictions.map((prediction, index) => (
+                    <div key={index} className="flex justify-between items-center">
+                      <span className="font-medium text-blue-900">{prediction.speaker}</span>
+                      <span className="text-blue-700">{(prediction.confidence * 100).toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
           
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -172,41 +155,8 @@ export default function NewReciterPage() {
                 required
               />
               <p className="text-sm text-gray-500 mt-1">
-                Please upload a clear recording of the reciter (MP3 format recommended, 30 seconds to 2 minutes).
+                Please upload a clear recording of the reciter (MP3, WAV, or M4A format, 30 seconds to 2 minutes).
               </p>
-            </div>
-            
-            <div>
-              <Label>Processing Method</Label>
-              <RadioGroup 
-                value={processingMethod} 
-                onValueChange={(value) => setProcessingMethod(value as 'js' | 'python')}
-                className="mt-2"
-              >
-                <div className="flex items-start space-x-2 mb-2">
-                  <RadioGroupItem value="python" id="python" />
-                  <div>
-                    <Label htmlFor="python" className="font-medium">
-                      Enhanced Fingerprinting (Recommended)
-                    </Label>
-                    <p className="text-sm text-gray-500">
-                      Uses advanced techniques: sequence matching, voice normalization, DTW
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start space-x-2">
-                  <RadioGroupItem value="js" id="js" />
-                  <div>
-                    <Label htmlFor="js" className="font-medium">
-                      Classic Method
-                    </Label>
-                    <p className="text-sm text-gray-500">
-                      Original method using simple vector matching
-                    </p>
-                  </div>
-                </div>
-              </RadioGroup>
             </div>
             
             <Button 
@@ -217,7 +167,7 @@ export default function NewReciterPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
+                  Processing with AI...
                 </>
               ) : (
                 'Create Reciter'
@@ -227,17 +177,16 @@ export default function NewReciterPage() {
         </CardContent>
         <CardFooter>
           <div className="w-full">
-            <h3 className="font-medium mb-2">About Enhanced Fingerprinting</h3>
+            <h3 className="font-medium mb-2">About AI Speaker Recognition</h3>
             <p className="text-sm text-gray-500 mb-2">
-              The enhanced fingerprinting method uses advanced techniques to better identify reciters:
+              Our AI-powered speaker recognition system uses advanced deep learning to identify reciters:
             </p>
             <ul className="text-sm text-gray-500 list-disc pl-5 space-y-1">
-              <li>Dynamic Time Warping (DTW) for temporal sequence matching</li>
-              <li>Voice normalization for better consistency across recordings</li>
-              <li>Segmentation to compare matching verses</li>
-              <li>Pitch contour tracking for tajweed characteristics</li>
-              <li>Formant analysis to capture voice characteristics</li>
-              <li>Pause pattern detection for individual reciter style</li>
+              <li>Deep neural network trained on Quranic recitations</li>
+              <li>Mel-frequency cepstral coefficients (MFCC) for voice analysis</li>
+              <li>Speaker-specific voice characteristics detection</li>
+              <li>Confidence scoring for prediction reliability</li>
+              <li>Support for multiple audio formats</li>
             </ul>
           </div>
         </CardFooter>

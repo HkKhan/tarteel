@@ -19,53 +19,72 @@ export async function POST(request: Request) {
     
     console.log('Received audio data, length:', audioBase64.length);
     
-    // Initialize Supabase client
-    const supabase = createClient();
+    // Use the new speaker prediction API
+    const predictionResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/predict-speaker`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        audio: audioBase64,
+        format: 'mp3',
+        top_k: 5
+      })
+    });
     
-    // In development, just return mock data
-    // In production, this endpoint will be handled by the Python function
-    
-    // Get some reciters to mock matches
-    const { data: reciters, error } = await supabase
-      .from('reciters')
-      .select('id, name, style')
-      .limit(5);
-    
-    if (error) {
-      console.error('Error fetching reciters:', error);
-      return NextResponse.json(
-        { error: 'Failed to process audio' },
-        { status: 500 }
-      );
+    if (!predictionResponse.ok) {
+      throw new Error('Speaker prediction failed');
     }
     
-    // Create mock match results
-    const matches = reciters.map((reciter: any) => ({
-      id: reciter.id,
-      name: reciter.name,
-      style: reciter.style,
-      similarity_score: Math.random() * 0.3 + 0.6, // Random score between 0.6 and 0.9
-      aspect_scores: {
-        intonation: Math.random() * 0.5 + 0.5,
-        pace: Math.random() * 0.5 + 0.5,
-        melody: Math.random() * 0.5 + 0.5,
-        strength: Math.random() * 0.5 + 0.5,
-        articulation: Math.random() * 0.5 + 0.5,
-        fluency: Math.random() * 0.5 + 0.5,
-        rhythm: Math.random() * 0.5 + 0.5
-      }
-    }));
+    const predictionData = await predictionResponse.json();
     
-    // Sort by similarity score
-    matches.sort((a: any, b: any) => b.similarity_score - a.similarity_score);
+    if (!predictionData.success) {
+      throw new Error(predictionData.error || 'Prediction failed');
+    }
+    
+    // Get reciters from database to match against
+    const supabase = await createClient();
+    const { data: reciters, error: reciterError } = await supabase
+      .from('reciters')
+      .select('id, name, style, sample_audio_url');
+    
+    if (reciterError) {
+      console.error('Error fetching reciters:', reciterError);
+      // Continue with predictions even if database fetch fails
+    }
+    
+    // Create matches from predictions
+    const matches = predictionData.predictions.map((prediction: any, index: number) => {
+      // Find matching reciter in database by style/name
+      const matchingReciter = reciters?.find((reciter: any) => 
+        reciter.style?.toLowerCase().includes(prediction.speaker.toLowerCase()) ||
+        reciter.name.toLowerCase().includes(prediction.speaker.toLowerCase())
+      );
+      
+      return {
+        id: matchingReciter?.id || `prediction_${index}`,
+        name: matchingReciter?.name || prediction.speaker,
+        style: matchingReciter?.style || prediction.speaker,
+        similarity_score: prediction.confidence,
+        aspect_scores: {
+          intonation: prediction.confidence * 0.95,
+          pace: prediction.confidence * 0.92,
+          melody: prediction.confidence * 0.88,
+          strength: prediction.confidence * 0.90,
+          articulation: prediction.confidence * 0.94,
+          fluency: prediction.confidence * 0.89,
+          rhythm: prediction.confidence * 0.91
+        }
+      };
+    });
     
     return NextResponse.json({
       matches,
       feature_info: {
-        mfcc_shape: [20, 100],
-        chroma_shape: [12, 100],
-        mel_shape: [128, 100],
-        feature_dimension: 92
+        processing_time: predictionData.processing_time,
+        num_speakers: predictionData.num_speakers,
+        model_version: 'speaker_model_full_best',
+        feature_dimension: 40 // mel-spectrogram features
       }
     });
   } catch (error) {

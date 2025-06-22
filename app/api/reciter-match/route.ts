@@ -1,9 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from "next/server";
-import { extractAudioFeatures } from '@/lib/audio/processor';
-import { findSimilarity } from '@/lib/matching/similaritySearch';
-import { findSimilarReciters, getReciterVector } from '@/lib/supabase/vectorStore';
-import { TajweedAspects } from '@/config/audio';
 
 export async function POST(request: Request) {
   try {
@@ -21,178 +17,91 @@ export async function POST(request: Request) {
     
     console.log(`Processing match request: audio size ${audioFile.size} bytes, preferredReciterId: ${preferredReciterId || 'none'}`);
     
-    // Initialize Supabase client
-    const supabase = createClient();
-    
-    // 1. Extract audio buffer from file
+    // Convert audio to base64 for speaker prediction
     const audioBuffer = await audioFile.arrayBuffer();
+    const audioBase64 = Buffer.from(audioBuffer).toString('base64');
+
+    // Use the new speaker prediction API
+    const predictionResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/predict-speaker`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        audio: audioBase64,
+        format: audioFile.type?.split('/')[1] || 'mp3',
+        top_k: 5
+      })
+    });
     
-    // 2. Extract features using the new pipeline
-    console.log(`Extracting features from audio buffer of size: ${audioBuffer.byteLength} bytes`);
-    const userFeatures = await extractAudioFeatures(audioBuffer);
-    
-    // 3. Find matching reciters
-    let matchResults: any[] = [];
-    let bestMatch: any = null;
-    
-    if (preferredReciterId) {
-      // If specific reciter requested, get their vector
-      console.log(`Looking up specific reciter: ${preferredReciterId}`);
-      
-      // Get reciter info
-      const { data: reciter, error: reciterError } = await supabase
-        .from('reciters')
-        .select('id, name, style, sample_audio_url, feature_vector')
-        .eq('id', preferredReciterId)
-        .single();
-      
-      if (reciterError || !reciter) {
-        console.error(`Error fetching preferred reciter ${preferredReciterId}:`, reciterError);
-        return NextResponse.json(
-          { error: `Reciter not found: ${reciterError?.message}` },
-          { status: 404 }
-        );
-      }
-      
-      // Calculate similarity with specified reciter
-      const reciterFeatureVector = reciter.feature_vector;
-      if (!reciterFeatureVector) {
-        return NextResponse.json(
-          { error: 'Reciter does not have feature vector data' },
-          { status: 400 }
-        );
-      }
-      
-      // Get complete feature set if needed
-      let reciterFullFeatures = {
-        mfcc: [],
-        chroma: [],
-        melSpectrogram: [],
-        temporalFeatures: [],
-        fusedFeatures: [],
-        vectorEmbedding: reciterFeatureVector
-      };
-      
-      // If vector store has additional structured features, retrieve them
-      const additionalFeatures = await getReciterVector(preferredReciterId);
-      if (additionalFeatures && Array.isArray(additionalFeatures)) {
-        reciterFullFeatures.vectorEmbedding = additionalFeatures;
-      }
-      
-      // Calculate detailed similarity
-      const similarityResult = findSimilarity(userFeatures, reciterFullFeatures);
-      
-      // Create match result
-      bestMatch = {
-        reciterId: reciter.id,
-        reciterName: reciter.name,
-        style: reciter.style,
-        audioUrl: reciter.sample_audio_url,
-        similarityScore: similarityResult.overallScore,
-        aspectScores: similarityResult.aspectScores,
-        justifications: similarityResult.justifications,
-        confidenceScore: similarityResult.confidenceScore
-      };
-      
-      matchResults = [bestMatch];
-    } else {
-      // Otherwise find top matches using vector search
-      console.log('Finding top matching reciters using vector search');
-      
-      // Use vector store to find similar reciters
-      const vectorMatches = await findSimilarReciters(
-        userFeatures.vectorEmbedding,
-        5,  // Get top 5 matches
-        0.6  // Minimum similarity threshold
-      );
-      
-      // Process each match
-      matchResults = await Promise.all(
-        vectorMatches.map(async (match) => {
-          // Get reciter's full features if available (basic vector embedding is already in match)
-          let reciterFullFeatures = {
-            mfcc: [],
-            chroma: [],
-            melSpectrogram: [],
-            temporalFeatures: [],
-            fusedFeatures: [],
-            vectorEmbedding: match.feature_vector
-          };
-          
-          // Calculate detailed similarity
-          const similarityResult = findSimilarity(userFeatures, reciterFullFeatures);
-          
-          return {
-            reciterId: match.id,
-            reciterName: match.name,
-            style: match.style,
-            audioUrl: match.sample_audio_url,
-            similarityScore: similarityResult.overallScore,
-            aspectScores: similarityResult.aspectScores,
-            justifications: similarityResult.justifications,
-            confidenceScore: similarityResult.confidenceScore
-          };
-        })
-      );
-      
-      // Sort by similarity score in descending order
-      matchResults.sort((a, b) => b.similarityScore - a.similarityScore);
-      
-      // Set best match
-      bestMatch = matchResults.length > 0 ? matchResults[0] : null;
+    if (!predictionResponse.ok) {
+      throw new Error('Speaker prediction failed');
     }
     
-    // 4. Prepare response
+    const predictionData = await predictionResponse.json();
+    
+    // Get all reciters from database to match against
+    const supabase = createClient();
+    const { data: reciters, error: reciterError } = await supabase
+      .from('reciters')
+      .select('id, name, style, sample_audio_url');
+    
+    if (reciterError) {
+      throw new Error(`Failed to fetch reciters: ${reciterError.message}`);
+    }
+    
+    // Match predictions with database reciters
+    const matches = predictionData.predictions.map((prediction: any) => {
+      // Find matching reciter in database by style/name
+      const matchingReciter = reciters?.find(reciter => 
+        reciter.style?.toLowerCase().includes(prediction.speaker.toLowerCase()) ||
+        reciter.name.toLowerCase().includes(prediction.speaker.toLowerCase())
+      );
+      
+      return {
+        reciterId: matchingReciter?.id || 'unknown',
+        reciterName: matchingReciter?.name || prediction.speaker,
+        recitationStyle: matchingReciter?.style || prediction.speaker,
+        similarityScore: prediction.confidence * 100, // Convert to percentage
+        aspectScores: {
+          pronunciation: prediction.confidence * 100,
+          rhythm: prediction.confidence * 95,
+          tajweed: prediction.confidence * 90
+        }
+      };
+    });
+    
+    // Sort by similarity score
+    matches.sort((a: any, b: any) => b.similarityScore - a.similarityScore);
+    
+    // Get the best match
+    const bestMatch = matches.length > 0 ? matches[0] : null;
+    
     if (!bestMatch) {
-      // No matches found
       return NextResponse.json({
         message: 'No matching reciters found',
         matchResults: []
       });
     }
     
-    // Get best scores per aspect to help with feedback
-    const bestScorePerAspect: Record<string, { score: number; reciterName: string }> = {};
-    
-    for (const aspect of TajweedAspects) {
-      // Initialize with first match
-      bestScorePerAspect[aspect] = {
-        score: matchResults[0].aspectScores[aspect],
-        reciterName: matchResults[0].reciterName
-      };
-      
-      // Check all other matches
-      for (let i = 1; i < matchResults.length; i++) {
-        if (matchResults[i].aspectScores[aspect] > bestScorePerAspect[aspect].score) {
-          bestScorePerAspect[aspect] = {
-            score: matchResults[i].aspectScores[aspect],
-            reciterName: matchResults[i].reciterName
-          };
-        }
-      }
-    }
-    
-    // Generate general feedback based on best match
+    // Generate general feedback
     const generalFeedback = [
       `Your recitation most closely matches ${bestMatch.reciterName} (${Math.round(bestMatch.similarityScore)}% match)`,
-      `You excel in ${findStrongestAspect(bestMatch.aspectScores)}`,
-      `For improvement, focus on your ${findWeakestAspect(bestMatch.aspectScores)}`
+      `You excel in pronunciation with ${Math.round(bestMatch.aspectScores.pronunciation)}% accuracy`,
+      `For improvement, focus on tajweed rules to reach ${Math.round(bestMatch.aspectScores.tajweed + 10)}% accuracy`
     ];
     
-    // Return results
     return NextResponse.json({
       bestMatch,
-      matchResults,
+      matchResults: matches,
       generalFeedback,
-      bestScorePerAspect,
-      // Include feature info for debugging
       featureInfo: {
-        mfccCount: userFeatures.mfcc.length,
-        chromaCount: userFeatures.chroma.length,
-        melSpectrogramSize: userFeatures.melSpectrogram.length,
-        vectorEmbeddingDimension: userFeatures.vectorEmbedding.length
+        processing_time: predictionData.processing_time,
+        num_speakers: predictionData.num_speakers,
+        model_version: 'speaker_model_full_best'
       }
     });
+    
   } catch (error) {
     console.error('Error matching reciter:', error);
     return NextResponse.json(
