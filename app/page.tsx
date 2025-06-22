@@ -33,10 +33,10 @@ export default function Home() {
             </Link>
           </nav>
           <div className="flex items-center gap-3">
-            <Button variant="outline" asChild>
-              <Link href="/try">Try Without Login</Link>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" asChild>
+              <Link href="/record">Try Now - No Sign Up!</Link>
             </Button>
-            <Button asChild>
+            <Button variant="outline" asChild>
               <Link href="/auth/signin">Sign In</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild className="text-xs">
@@ -55,6 +55,7 @@ export default function Home() {
                 </h1>
                 <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl">
                   Receive personalized feedback by matching your voice to classical reciters.
+                  <span className="block mt-2 text-emerald-600 font-semibold">Try instantly - no sign up required!</span>
                 </p>
               </div>
               <div className="mx-auto w-full max-w-sm space-y-4 my-10">
@@ -64,12 +65,13 @@ export default function Home() {
                     size="icon"
                     asChild
                   >
-                    <Link href={isLoggedIn ? "/record" : "/try"}>
+                    <Link href="/record">
                       <Mic className="h-14 w-14" />
                       <span className="sr-only">Record Recitation</span>
                     </Link>
                   </Button>
                   <p className="text-md font-medium text-center">Record Surah Al-Fatiha to get started</p>
+                  <p className="text-sm text-emerald-600 font-medium">No account needed - start immediately!</p>
                 </div>
               </div>
             </div>
@@ -157,17 +159,17 @@ export default function Home() {
                 </h2>
                 <p className="text-muted-foreground md:text-xl">
                   Join thousands of Muslims worldwide who are improving their Quranic recitation through our AI-powered
-                  platform.
+                  platform. No account required to get started!
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Button className="bg-emerald-600 hover:bg-emerald-700" asChild>
-                    <Link href={isLoggedIn ? "/record" : "/try"}>
-                      Try Now <ArrowRight className="ml-2 h-4 w-4" />
+                    <Link href="/record">
+                      Try Now - Free! <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
                   <Button variant="outline" asChild>
-                    <Link href="/try">
-                      Try Without Login
+                    <Link href="/auth/signin">
+                      Sign Up for History
                     </Link>
                   </Button>
                 </div>

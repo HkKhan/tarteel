@@ -70,11 +70,10 @@ class QuranSpeakerPredictor:
     def __init__(self):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # Use absolute paths relative to script directory
+        # Use local files in the same directory
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.join(script_dir, "..", "..")
-        model_path = os.path.join(project_root, "model", "speakerID", "speaker_model_full.pth")
-        mapping_path = os.path.join(project_root, "model", "speakerID", "speaker_mapping.pkl")
+        model_path = os.path.join(script_dir, "speaker_model_full.pth")
+        mapping_path = os.path.join(script_dir, "speaker_mapping.pkl")
         
         # Load speaker mapping
         with open(mapping_path, "rb") as f:

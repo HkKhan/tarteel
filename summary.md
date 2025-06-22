@@ -1,49 +1,129 @@
-# Tajweed Matcher Project Summary
+# Tarteel - Tajweed Matching Application
 
-## Project Overview
-Tajweed Matcher is a Next.js application designed to help users improve their Quranic recitation by:
+Tarteel is a web application built with Next.js that helps users improve their Quranic recitation through advanced audio analysis and comparison with expert reciters. The application uses machine learning to analyze recitation patterns and provide feedback on Tajweed pronunciation.
 
-1. Capturing a voice sample (recitation of Surah Al-Fatiha)
-2. Analyzing voice characteristics 
-3. Matching the user with a classical reciter based on voice similarity
-4. Providing specific, actionable feedback to improve recitation style
+## Current Status
 
-## Tech Stack
-- **Framework**: Next.js 15 with React 19
-- **Styling**: Tailwind CSS with shadcn/ui components
-- **Authentication**: Supabase Auth
-- **Database**: Supabase PostgreSQL
-- **Storage**: Supabase Storage (for audio files)
+✅ **Successfully deployed to Vercel**: https://tarteel-6qhalia9d-h-ks-projects.vercel.app
+✅ **Supabase Authentication implemented** with proper SSR support
+✅ **Database schema** set up for users, reciters, and recitations
+✅ **Audio processing** capabilities with Python backend
+✅ **Modern UI** built with shadcn/ui components
 
-## Main Features
-1. **User Authentication** - Sign up/login system via Supabase Auth
-2. **Voice Recording** - Browser-based audio recording using Web Audio API
-3. **Recitation Analysis** - Voice pattern matching (simulated in current version)
-4. **Reciter Matching** - Pairing users with classical reciters based on voice characteristics
-5. **Dashboard** - Tracking progress and history of recitations
+## Technical Architecture
 
-## Project Structure
-- **app/** - Next.js app router pages
-  - **page.tsx** - Landing page with introduction to the app
-  - **record/** - Recording interface for capturing recitations
-  - **dashboard/** - User dashboard showing history and progress
-  - **auth/** - Authentication pages (signin/signup)
-- **components/** - Reusable React components
-  - **ui/** - Base UI components (shadcn/ui)
-  - **recording/** - Components for audio recording
-  - **auth/** - Authentication-related components
-  - **dashboard/** - Dashboard-specific components
-- **lib/** - Utility functions and services
-  - **supabase/** - Supabase client configuration
+### Frontend (Next.js 15)
+- **Framework**: Next.js 15 with App Router
+- **UI Components**: shadcn/ui with Tailwind CSS
+- **Authentication**: Supabase Auth with proper SSR implementation
+- **State Management**: React hooks and local storage for client state
+- **TypeScript**: Full type safety across the application
 
-## Database Schema
-The application uses several tables in Supabase:
-1. **profiles** - User profile information
-2. **reciters** - Information about classical Quran reciters
-3. **recitations** - User's recitation history with analysis metrics
+### Backend & Database
+- **Database**: Supabase PostgreSQL with real-time subscriptions
+- **Authentication**: Supabase Auth with email/password and OAuth
+- **Storage**: Supabase Storage for audio files
+- **API Routes**: Next.js API routes for data processing
+- **Python Backend**: Vercel Python functions for audio analysis
 
-## Future Development
-- Implement actual voice analysis using audio processing algorithms or AI
-- Add more reciters and detailed recitation style guides
-- Implement detailed feedback with specific tajweed rules
-- Add waveform visualization during recording
+### Audio Processing
+- **Frontend Audio**: Web Audio API with Meyda for feature extraction
+- **Backend Processing**: Python with librosa and scikit-learn
+- **File Formats**: Support for various audio formats
+- **Real-time Analysis**: Live audio recording and processing
+
+## Key Features Implemented
+
+### Authentication System
+- ✅ Email/password authentication
+- ✅ User profile management
+- ✅ Protected routes with middleware
+- ✅ Session management with proper SSR
+- ✅ Sign up/sign in flow with email verification
+
+### Dashboard
+- ✅ User statistics and progress tracking
+- ✅ Recitation history with scores
+- ✅ Profile management interface
+- ✅ Responsive design for all devices
+
+### Audio Recording & Analysis
+- ✅ Browser-based audio recording
+- ✅ Real-time audio visualization
+- ✅ Audio feature extraction (MFCC, spectral features)
+- ✅ File upload and processing
+- ✅ Audio comparison with reference reciters
+
+### Database Schema
+```sql
+-- Users profiles table
+CREATE TABLE profiles (
+  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  full_name TEXT,
+  username TEXT UNIQUE,
+  avatar_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Reciters reference table
+CREATE TABLE reciters (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  style TEXT,
+  language TEXT DEFAULT 'arabic',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Recitations table
+CREATE TABLE recitations (
+  id SERIAL PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id),
+  audio_url TEXT,
+  surah INTEGER,
+  ayah_start INTEGER,
+  ayah_end INTEGER,
+  reciter_id INTEGER REFERENCES reciters(id),
+  overall_score DECIMAL,
+  pronunciation_score DECIMAL,
+  rhythm_score DECIMAL,
+  melody_score DECIMAL,
+  feature_vector DECIMAL[],
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+## Deployment Configuration
+
+### Vercel Settings
+- **Build Command**: `npm run build`
+- **Install Command**: `npm install --legacy-peer-deps`
+- **Node Version**: 18 (specified in .nvmrc)
+- **Python Functions**: Configured for audio processing APIs
+
+### Environment Variables Required
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
+
+## Recent Fixes & Improvements
+
+### Supabase SSR Implementation
+- ✅ Migrated from deprecated `@supabase/auth-helpers-nextjs` to `@supabase/ssr`
+- ✅ Implemented proper cookie handling with `getAll()` and `setAll()` methods
+- ✅ Created correct middleware for auth token refresh
+- ✅ Fixed client-side and server-side Supabase clients
+
+### Build & Deployment Fixes
+- ✅ Resolved package manager conflicts (npm vs pnpm)
+- ✅ Fixed environment variable handling during build
+- ✅ Added proper error handling for server components
+- ✅ Configured Vercel for optimal deployment
+
+### Authentication Flow
+- ✅ Proper middleware for route protection
+- ✅ Session management across client and server
+- ✅ Fallback handling for missing credentials
+- ✅ Secure authentication state management
