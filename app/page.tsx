@@ -39,9 +39,6 @@ export default function Home() {
             <Button variant="outline" asChild>
               <Link href="/auth/signin">Sign In</Link>
             </Button>
-            <Button variant="ghost" size="sm" asChild className="text-xs">
-              <Link href="/api/setup-storage">Setup Storage</Link>
-            </Button>
           </div>
         </div>
       </header>

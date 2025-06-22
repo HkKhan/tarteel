@@ -9,6 +9,21 @@ export async function GET(request: Request) {
   // to prevent unauthorized access
   
   try {
+    // Check if required environment variables are available
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return Response.json({
+        success: false,
+        message: 'Supabase URL not configured'
+      }, { status: 500 })
+    }
+    
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return Response.json({
+        success: false,
+        message: 'Service role key not configured. This is an admin-only function.'
+      }, { status: 500 })
+    }
+    
     const result = await setupStorage()
     
     if (!result.success) {
