@@ -59,26 +59,21 @@ export async function extractAudioFeatures(audioBuffer: ArrayBuffer) {
 }
 
 /**
- * Register a new reciter using the Python backend
+ * Register a new reciter using the backend
  */
 export async function registerReciter(audioBuffer: ArrayBuffer, reciterName: string) {
   // Convert ArrayBuffer to Blob
   const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
   
-  // Convert to base64
-  const base64Data = await blobToBase64(blob);
+  // Create FormData for the API
+  const formData = new FormData();
+  formData.append('name', reciterName);
+  formData.append('audio', blob);
   
-  // Send to Python API
-  const response = await fetch('/api/new-reciter-py', {
+  // Send to API
+  const response = await fetch('/api/new-reciter', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      audio: base64Data,
-      name: reciterName,
-      audioType: 'audio/mpeg'
-    })
+    body: formData
   });
   
   if (!response.ok) {

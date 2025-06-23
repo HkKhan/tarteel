@@ -97,17 +97,14 @@ export async function registerReciter(audioFile: Blob | File, reciterName: strin
     // Get audio type from the file
     const audioType = audioFile.type || 'audio/mpeg';
     
-    // Send to the Python API endpoint
-    const response = await fetch('/api/new-reciter-py', {
+    // Send to the API endpoint
+    const formData = new FormData();
+    formData.append('name', reciterName);
+    formData.append('audio', audioFile);
+    
+    const response = await fetch('/api/new-reciter', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        audio: audioBase64,
-        name: reciterName,
-        audioType: audioType
-      })
+      body: formData
     });
     
     if (!response.ok) {
