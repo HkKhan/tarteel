@@ -36,10 +36,19 @@ export async function POST(request: Request) {
     }
     
     // Get reciters from database to match against
-    const supabase = await createClient();
-    const { data: reciters, error: reciterError } = await supabase
-      .from('reciters')
-      .select('id, name, style, sample_audio_url');
+    let reciters = null;
+    let reciterError = null;
+    
+    try {
+      const supabase = await createClient();
+      const result = await supabase
+        .from('reciters')
+        .select('id, name, style, sample_audio_url');
+      reciters = result.data;
+      reciterError = result.error;
+    } catch (dbError) {
+      console.warn('Supabase not configured or failed:', dbError);
+    }
     
     if (reciterError) {
       console.error('Error fetching reciters:', reciterError);
@@ -81,10 +90,10 @@ export async function POST(request: Request) {
       },
       word_feedback: predictionData.word_feedback || []
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error processing audio:', error);
     return NextResponse.json(
-      { error: 'Failed to process audio' },
+      { error: error.message || 'Failed to process audio' },
       { status: 500 }
     );
   }

@@ -1,4 +1,5 @@
 import { runPredictSpeaker } from '@/lib/api/runpod';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const maxDuration = 300; // Allow 5 minutes for RunPod cold starts
 
