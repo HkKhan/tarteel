@@ -75,7 +75,8 @@ export async function processRecitation(audioBlob: Blob) {
       bestMatch,
       matchResults,
       generalFeedback,
-      featureInfo: data.feature_info
+      featureInfo: data.feature_info,
+      wordFeedback: data.word_feedback || []
     };
   } catch (error) {
     console.error('Error processing recitation:', error);

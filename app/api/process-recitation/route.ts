@@ -107,7 +107,8 @@ export async function POST(request: Request) {
         num_speakers: predictionData.num_speakers,
         model_version: 'speaker_model_full_best',
         feature_dimension: 40 // mel-spectrogram features
-      }
+      },
+      word_feedback: predictionData.word_feedback || []
     });
   } catch (error) {
     console.error('Error processing audio:', error);

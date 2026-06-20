@@ -15,6 +15,19 @@ interface AspectFeedback {
   advice: string;
 }
 
+interface WordFeedback {
+  word: string;
+  duration_advice: string;
+  duration_detail?: string;
+  pitch_advice: string;
+  pitch_detail?: string;
+  user_duration_s?: number;
+  ref_duration_s?: number;
+  user_pitch_hz?: number;
+  ref_pitch_hz?: number;
+  detail?: string;
+}
+
 interface MatchResult {
   reciterId: string;
   reciterName: string;
@@ -33,6 +46,7 @@ export default function GuestRecordingInterface() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("record");
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
+  const [wordFeedback, setWordFeedback] = useState<WordFeedback[]>([]);
   const [feedback, setFeedback] = useState<{
     general: string[];
     specific: Record<string, AspectFeedback>;
@@ -180,6 +194,7 @@ export default function GuestRecordingInterface() {
     setRecordingTime(0);
     setActiveTab("record");
     setMatchResults([]);
+    setWordFeedback([]);
     setFeedback(null);
     setError(null);
 
@@ -210,6 +225,11 @@ export default function GuestRecordingInterface() {
       // Update the state with the results
       if (responseData.bestMatch && responseData.matchResults) {
         setMatchResults(responseData.matchResults);
+
+        // Set word-level feedback if available
+        if (responseData.wordFeedback && responseData.wordFeedback.length > 0) {
+          setWordFeedback(responseData.wordFeedback);
+        }
 
         // Create simple feedback object format based on match results
         const specificFeedback: Record<string, AspectFeedback> = {};
@@ -444,6 +464,76 @@ export default function GuestRecordingInterface() {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {/* Word-Level Feedback Section */}
+              {wordFeedback.length > 0 && (
+                <div className="bg-amber-50 p-6 rounded-lg border border-amber-200">
+                  <h3 className="text-xl font-semibold text-amber-800 mb-2">
+                    Word-by-Word Analysis
+                  </h3>
+                  <p className="text-sm text-amber-600 mb-4">
+                    Compared against {matchResults[0]?.reciterName || 'your matched reciter'}
+                  </p>
+                  <div className="space-y-3">
+                    {wordFeedback.map((wf, idx) => {
+                      const durationColor =
+                        wf.duration_advice === 'good'
+                          ? 'bg-green-100 text-green-800 border-green-300'
+                          : wf.duration_advice === 'elongate'
+                          ? 'bg-blue-100 text-blue-800 border-blue-300'
+                          : wf.duration_advice === 'shorten'
+                          ? 'bg-orange-100 text-orange-800 border-orange-300'
+                          : 'bg-gray-100 text-gray-600 border-gray-300';
+                      const pitchColor =
+                        wf.pitch_advice === 'good'
+                          ? 'bg-green-100 text-green-800 border-green-300'
+                          : wf.pitch_advice === 'go higher'
+                          ? 'bg-purple-100 text-purple-800 border-purple-300'
+                          : wf.pitch_advice === 'go lower'
+                          ? 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                          : 'bg-gray-100 text-gray-600 border-gray-300';
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 bg-white rounded-lg border shadow-sm"
+                        >
+                          {/* Arabic word */}
+                          <span
+                            className="text-lg font-bold text-gray-900 min-w-[80px] text-right font-arabic"
+                            dir="rtl"
+                          >
+                            {wf.word}
+                          </span>
+
+                          {/* Advice pills */}
+                          <div className="flex flex-wrap gap-2 flex-1">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${durationColor}`}
+                              title={wf.duration_detail || ''}
+                            >
+                              ⏱ {wf.duration_advice === 'good' ? '✓ Duration' : wf.duration_advice === 'elongate' ? '→ Elongate' : wf.duration_advice === 'shorten' ? '← Shorten' : wf.duration_advice}
+                            </span>
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${pitchColor}`}
+                              title={wf.pitch_detail || ''}
+                            >
+                              🎵 {wf.pitch_advice === 'good' ? '✓ Pitch' : wf.pitch_advice === 'go higher' ? '↑ Go Higher' : wf.pitch_advice === 'go lower' ? '↓ Go Lower' : wf.pitch_advice}
+                            </span>
+                          </div>
+
+                          {/* Numeric details */}
+                          {wf.user_duration_s !== undefined && wf.ref_duration_s !== undefined && (
+                            <div className="text-xs text-gray-500 whitespace-nowrap">
+                              {wf.user_duration_s.toFixed(2)}s vs {wf.ref_duration_s.toFixed(2)}s
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

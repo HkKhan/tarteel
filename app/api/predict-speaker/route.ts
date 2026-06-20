@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
       num_speakers: mappedPredictions.length,
       processing_time: processingTime,
       transcription: mlOutput.transcription,
-      fatiha_verified: mlOutput.fatiha_verified
+      fatiha_verified: mlOutput.fatiha_verified,
+      word_feedback: mlOutput.word_feedback || []
     });
 
   } catch (error) {
