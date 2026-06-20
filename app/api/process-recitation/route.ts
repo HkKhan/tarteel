@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { runPredictSpeaker } from '@/lib/api/runpod';
 
 export const maxDuration = 300; // Allow 5 minutes for RunPod cold starts
 
@@ -24,27 +25,7 @@ export async function POST(request: Request) {
     // Try to use the Python prediction API, but fallback to mock data if it fails
     let predictionData;
     try {
-      const baseUrl = process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : process.env.NEXTAUTH_URL || 'http://localhost:3000';
-        
-      const predictionResponse = await fetch(`${baseUrl}/api/predict-speaker`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audio: audioBase64,
-          format: 'mp3',
-          top_k: 5
-        })
-      });
-      
-      if (!predictionResponse.ok) {
-        throw new Error('Speaker prediction failed');
-      }
-      
-      predictionData = await predictionResponse.json();
+      predictionData = await runPredictSpeaker(audioBase64, 5);
       
       if (!predictionData.success) {
         throw new Error(predictionData.error || 'Prediction failed');
