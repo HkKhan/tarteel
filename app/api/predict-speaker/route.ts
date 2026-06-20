@@ -48,12 +48,38 @@ export async function POST(request: NextRequest) {
       throw new Error(`RunPod API error: ${runpodResponse.statusText}`);
     }
 
-    const result = await runpodResponse.json();
+    let result = await runpodResponse.json();
+    
+    // If RunPod is cold starting or taking a while, it returns IN_QUEUE or IN_PROGRESS
+    if (result.status === 'IN_QUEUE' || result.status === 'IN_PROGRESS') {
+      const jobId = result.id;
+      const statusUrl = `https://api.runpod.ai/v2/${runpodEndpoint}/status/${jobId}`;
+      
+      // Poll for up to 240 seconds
+      const maxRetries = 48; // 48 * 5s = 240s
+      let retries = 0;
+      
+      while ((result.status === 'IN_QUEUE' || result.status === 'IN_PROGRESS') && retries < maxRetries) {
+        // Wait 5 seconds before checking again
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        const statusResponse = await fetch(statusUrl, {
+          headers: {
+            'Authorization': `Bearer ${runpodApiKey}`,
+          }
+        });
+        
+        if (statusResponse.ok) {
+          result = await statusResponse.json();
+        }
+        retries++;
+      }
+    }
     
     // RunPod API wraps the returned JSON in an "output" field
     if (result.status !== 'COMPLETED' || !result.output) {
        console.error("RunPod failure status:", result);
-       throw new Error('Prediction failed on RunPod backend');
+       throw new Error(`Prediction failed on RunPod backend (status: ${result.status})`);
     }
 
     const mlOutput = result.output;

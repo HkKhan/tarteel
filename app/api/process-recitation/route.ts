@@ -50,20 +50,8 @@ export async function POST(request: Request) {
         throw new Error(predictionData.error || 'Prediction failed');
       }
     } catch (error) {
-      console.log('Python prediction failed, using fallback:', error);
-      // Fallback to mock predictions
-      predictionData = {
-        success: true,
-        predictions: [
-          { speaker: 'Abdul Basit Abd us-Samad', confidence: 0.85 },
-          { speaker: 'Mishary Rashid Alafasy', confidence: 0.78 },
-          { speaker: 'Saad Al-Ghamdi', confidence: 0.72 },
-          { speaker: 'Maher Al Mueaqly', confidence: 0.68 },
-          { speaker: 'Ahmed ibn Ali al-Ajamy', confidence: 0.65 }
-        ],
-        processing_time: 0.5,
-        num_speakers: 5
-      };
+      console.log('Python prediction failed:', error);
+      throw error; // Bubble up the error so the frontend shows it
     }
     
     // Get reciters from database to match against
