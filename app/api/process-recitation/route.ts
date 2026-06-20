@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+export const maxDuration = 300; // Allow 5 minutes for RunPod cold starts
+
 // For development mode, we'll implement a basic version here
 // In production, this will be handled by the Python function
 
