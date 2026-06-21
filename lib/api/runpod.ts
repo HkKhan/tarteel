@@ -71,13 +71,14 @@ export async function runPredictSpeaker(audioBase64: string, topK: number = 5) {
       confidence: r.score
   }));
 
-  return {
-    success: true,
-    predictions: mappedPredictions,
-    num_speakers: mappedPredictions.length,
-    processing_time: processingTime,
-    transcription: mlOutput.transcription,
-    fatiha_verified: mlOutput.fatiha_verified,
-    word_feedback: mlOutput.word_feedback || []
-  };
-}
+    return {
+      success: true,
+      predictions: mappedPredictions,
+      num_speakers: mappedPredictions.length,
+      processing_time: processingTime,
+      transcription: mlOutput.transcription,
+      fatiha_verified: mlOutput.fatiha_verified,
+      word_feedback: mlOutput.word_feedback || [],
+      ref_audio_url: mlOutput.ref_audio_url || null
+    };
+  }

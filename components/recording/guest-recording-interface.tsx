@@ -21,6 +21,10 @@ interface WordFeedback {
   duration_detail?: string;
   pitch_advice: string;
   pitch_detail?: string;
+  user_start_s?: number;
+  user_end_s?: number;
+  ref_start_s?: number;
+  ref_end_s?: number;
   user_duration_s?: number;
   ref_duration_s?: number;
   user_pitch_hz?: number;
@@ -42,6 +46,7 @@ export default function GuestRecordingInterface() {
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [refAudioUrl, setRefAudioUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("record");
@@ -56,8 +61,29 @@ export default function GuestRecordingInterface() {
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const userAudioRef = useRef<HTMLAudioElement | null>(null);
+  const refAudioRef = useRef<HTMLAudioElement | null>(null);
   const router = useRouter();
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const playWord = (type: 'user' | 'ref', startS: number | undefined, endS: number | undefined) => {
+    if (startS === undefined || endS === undefined) return;
+    const audioEl = type === 'user' ? userAudioRef.current : refAudioRef.current;
+    if (!audioEl) return;
+    
+    // Reset any previous timeout
+    if ((audioEl as any).playTimeout) {
+      clearTimeout((audioEl as any).playTimeout);
+    }
+
+    audioEl.currentTime = Math.max(0, startS - 0.1); // 0.1s padding
+    audioEl.play().catch(e => console.error("Playback failed", e));
+    
+    const durationMs = (endS - startS + 0.2) * 1000;
+    (audioEl as any).playTimeout = setTimeout(() => {
+      audioEl.pause();
+    }, durationMs);
+  };
 
   useEffect(() => {
     return () => {
@@ -226,9 +252,12 @@ export default function GuestRecordingInterface() {
       if (responseData.bestMatch && responseData.matchResults) {
         setMatchResults(responseData.matchResults);
 
-        // Set word-level feedback if available
+        // Set word-level feedback and audio URL if available
         if (responseData.wordFeedback && responseData.wordFeedback.length > 0) {
           setWordFeedback(responseData.wordFeedback);
+        }
+        if (responseData.refAudioUrl) {
+          setRefAudioUrl(responseData.refAudioUrl);
         }
 
         // Create simple feedback object format based on match results
@@ -526,8 +555,24 @@ export default function GuestRecordingInterface() {
 
                           {/* Numeric details */}
                           {wf.user_duration_s !== undefined && wf.ref_duration_s !== undefined && (
-                            <div className="text-xs text-gray-500 whitespace-nowrap">
-                              {wf.user_duration_s.toFixed(2)}s vs {wf.ref_duration_s.toFixed(2)}s
+                            <div className="text-xs text-gray-500 whitespace-nowrap flex items-center gap-1">
+                              <button 
+                                onClick={() => playWord('user', wf.user_start_s, wf.user_end_s)}
+                                className="hover:text-amber-600 hover:bg-amber-100 px-1 py-0.5 rounded transition-colors"
+                                title="Play your pronunciation"
+                                type="button"
+                              >
+                                {wf.user_duration_s.toFixed(2)}s
+                              </button> 
+                              <span>vs</span> 
+                              <button 
+                                onClick={() => playWord('ref', wf.ref_start_s, wf.ref_end_s)}
+                                className="hover:text-amber-600 hover:bg-amber-100 px-1 py-0.5 rounded transition-colors"
+                                title="Play Sheikh's pronunciation"
+                                type="button"
+                              >
+                                {wf.ref_duration_s.toFixed(2)}s
+                              </button>
                             </div>
                           )}
                         </div>
@@ -578,6 +623,10 @@ export default function GuestRecordingInterface() {
                   Record Again
                 </Button>
               </div>
+
+              {/* Hidden audio elements for word playback */}
+              {audioUrl && <audio ref={userAudioRef} src={audioUrl} className="hidden" preload="auto" />}
+              {refAudioUrl && <audio ref={refAudioRef} src={refAudioUrl} className="hidden" preload="auto" />}
             </div>
           )}
         </TabsContent>
