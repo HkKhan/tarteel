@@ -29,17 +29,36 @@ export async function processRecitation(audioBlob: Blob) {
     // Default to audio/mpeg for recorded audio
     const audioType = audioBlob.type || 'audio/mpeg';
     
-    // Send to the Python API endpoint
-    const response = await fetch('/api/process-recitation', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        audio: audioBase64,
-        audioType: audioType
-      })
-    });
+    // Send directly to the Cloud Run API endpoint to bypass Next.js API timeouts
+    const cloudRunUrl = process.env.NEXT_PUBLIC_GCP_CLOUD_RUN_URL;
+    let response;
+    
+    if (cloudRunUrl) {
+      response = await fetch(`${cloudRunUrl}/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          input: {
+            audio_b64: audioBase64,
+            top_k: 5
+          }
+        })
+      });
+    } else {
+      // Fallback to Next.js API route if Cloud Run URL is not configured
+      response = await fetch('/api/process-recitation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audio: audioBase64,
+          audioType: audioType
+        })
+      });
+    }
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -49,14 +68,46 @@ export async function processRecitation(audioBlob: Blob) {
     // Parse the response
     const data = await response.json();
     
-    // Transform the data to match the expected format in the frontend
-    const matchResults = data.matches.map((match: any) => ({
-      reciterId: match.id,
-      reciterName: match.name,
-      recitationStyle: match.style,
-      similarityScore: match.similarity_score * 100, // Convert to percentage
-      aspectScores: transformAspectScores(match.aspect_scores || {})
-    }));
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    
+    // Transform the data to match the expected format in the frontend depending on where it came from
+    let matchResults = [];
+    
+    if (cloudRunUrl) {
+      // Data directly from Cloud Run
+      const mappedPredictions = data.rankings.map((r: any) => ({
+        speaker: r.name,
+        confidence: r.score
+      }));
+      
+      // Need to simulate the reciter data transformation that usually happens in route.ts
+      matchResults = mappedPredictions.map((prediction: any, index: number) => ({
+        reciterId: `prediction_${index}`,
+        reciterName: prediction.speaker,
+        recitationStyle: prediction.speaker,
+        similarityScore: prediction.confidence * 100, // Convert to percentage
+        aspectScores: transformAspectScores({
+          intonation: prediction.confidence * 0.95,
+          pace: prediction.confidence * 0.92,
+          melody: prediction.confidence * 0.88,
+          strength: prediction.confidence * 0.90,
+          articulation: prediction.confidence * 0.94,
+          fluency: prediction.confidence * 0.89,
+          rhythm: prediction.confidence * 0.91
+        })
+      }));
+    } else {
+      // Data from Next.js API route
+      matchResults = data.matches.map((match: any) => ({
+        reciterId: match.id,
+        reciterName: match.name,
+        recitationStyle: match.style,
+        similarityScore: match.similarity_score * 100, // Convert to percentage
+        aspectScores: transformAspectScores(match.aspect_scores || {})
+      }));
+    }
     
     // Sort by similarity score
     matchResults.sort((a: any, b: any) => b.similarityScore - a.similarityScore);

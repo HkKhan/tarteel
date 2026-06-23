@@ -76,10 +76,13 @@ export default function GuestRecordingInterface() {
       clearTimeout((audioEl as any).playTimeout);
     }
 
-    audioEl.currentTime = Math.max(0, startS - 0.1); // 0.1s padding
+    // Apply 150ms padding to both to compensate for HTML5 Audio buffer latency
+    const padding = 0.15;
+    audioEl.currentTime = Math.max(0, startS - padding);
     audioEl.play().catch(e => console.error("Playback failed", e));
     
-    const durationMs = (endS - startS + 0.2) * 1000;
+    // Play for duration + 0.2s padding
+    const durationMs = (endS - startS + padding + 0.1) * 1000;
     (audioEl as any).playTimeout = setTimeout(() => {
       audioEl.pause();
     }, durationMs);

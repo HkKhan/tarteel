@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Mic, Save, Trash2, Loader2 } from "lucide-react"
+import { Mic, Save, Trash2, Loader2, Upload } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -20,10 +20,12 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("record")
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -37,6 +39,49 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
       }
     }
   }, [audioUrl])
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const processUploadedFile = (file: File) => {
+    const url = URL.createObjectURL(file)
+    setAudioBlob(file)
+    setAudioUrl(url)
+    setRecordingTime(0)
+    setActiveTab("preview")
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0]
+      if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|m4a|ogg|flac)$/i)) {
+        processUploadedFile(file)
+      } else {
+        setError("Please upload a valid audio file.")
+      }
+    }
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      processUploadedFile(file)
+    }
+  }
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click()
+  }
 
   const startRecording = async () => {
     try {
@@ -208,30 +253,79 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
         </TabsList>
 
         <TabsContent value="record" className="pt-6">
-          <div className="flex flex-col items-center justify-center space-y-8">
+          <div 
+            className={`flex flex-col items-center justify-center space-y-8 p-8 rounded-lg border-2 border-dashed transition-colors ${
+              isDragOver
+                ? "border-blue-400 bg-blue-50"
+                : "border-gray-300 hover:border-gray-400"
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <div className="text-center">
               <p className="text-lg font-medium mb-2">Recite Surah Al-Fatiha</p>
-              <p className="text-sm text-muted-foreground">Press the microphone button to start recording</p>
-            </div>
-
-            <div className="relative">
-              <Button
-                className={`h-32 w-32 rounded-full ${
-                  isRecording ? "bg-red-500 hover:bg-red-600 animate-pulse" : "bg-emerald-600 hover:bg-emerald-700"
-                }`}
-                onClick={isRecording ? stopRecording : startRecording}
-                disabled={isProcessing}
-              >
-                <Mic className="h-12 w-12" />
-              </Button>
-              {isRecording && (
-                <div className="absolute -bottom-8 left-0 right-0 text-center">
-                  <span className="text-sm font-medium">{formatTime(recordingTime)}</span>
-                </div>
+              <p className="text-sm text-muted-foreground">Record your voice or upload an audio file</p>
+              {isDragOver && (
+                <p className="text-sm text-blue-600 font-medium mt-2">
+                  Drop your audio file here!
+                </p>
               )}
             </div>
 
-            {isRecording && <p className="text-red-500 animate-pulse">Recording...</p>}
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+              {/* Recording button */}
+              <div className="relative flex flex-col items-center">
+                <Button
+                  className={`h-32 w-32 rounded-full ${
+                    isRecording ? "bg-red-500 hover:bg-red-600 animate-pulse" : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={isProcessing}
+                >
+                  <Mic className="h-12 w-12" />
+                </Button>
+                {isRecording && (
+                  <div className="absolute top-32 w-full text-center">
+                    <span className="text-sm font-medium">{formatTime(recordingTime)}</span>
+                  </div>
+                )}
+                <p className="text-center mt-4 text-sm font-medium">Record Audio</p>
+              </div>
+
+              {/* Or divider */}
+              <div className="text-muted-foreground text-lg font-medium px-4">
+                OR
+              </div>
+
+              {/* Upload button */}
+              <div className="relative flex flex-col items-center">
+                <Button
+                  className="h-32 w-32 rounded-full bg-blue-600 hover:bg-blue-700"
+                  onClick={triggerFileUpload}
+                  disabled={isProcessing || isRecording}
+                >
+                  <Upload className="h-12 w-12" />
+                </Button>
+                <p className="text-center mt-4 text-sm font-medium">
+                  Upload MP3/Audio
+                </p>
+                <p className="text-center text-xs text-muted-foreground mt-1">
+                  MP3, WAV, M4A supported
+                </p>
+              </div>
+            </div>
+
+            {isRecording && <p className="text-red-500 animate-pulse mt-4">Recording...</p>}
           </div>
         </TabsContent>
 
