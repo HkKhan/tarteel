@@ -48,6 +48,7 @@ export default function GuestRecordingInterface() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [refAudioUrl, setRefAudioUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("record");
   const [matchResults, setMatchResults] = useState<MatchResult[]>([]);
@@ -98,6 +99,23 @@ export default function GuestRecordingInterface() {
       }
     };
   }, [audioUrl]);
+
+  useEffect(() => {
+    let progressTimer: NodeJS.Timeout;
+    if (isProcessing) {
+      progressTimer = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 100) return 100;
+          return prev + (100 / 300);
+        });
+      }, 1000);
+    } else {
+      setProgress(0);
+    }
+    return () => {
+      if (progressTimer) clearInterval(progressTimer);
+    };
+  }, [isProcessing]);
 
   const startRecording = async () => {
     try {
@@ -245,6 +263,7 @@ export default function GuestRecordingInterface() {
     if (!audioBlob) return;
 
     setIsProcessing(true);
+    setProgress(0);
     setError(null);
 
     try {
@@ -433,21 +452,29 @@ export default function GuestRecordingInterface() {
                 </Button>
 
                 <Button
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="relative overflow-hidden bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={processRecordingHandler}
                   disabled={isProcessing}
                 >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Analyze Recitation
-                    </>
+                  {isProcessing && (
+                    <div 
+                      className="absolute inset-y-0 left-0 bg-emerald-800 transition-all duration-1000 ease-linear" 
+                      style={{ width: `${progress}%` }}
+                    />
                   )}
+                  <span className="relative z-10 flex items-center justify-center">
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Analyze Recitation
+                      </>
+                    )}
+                  </span>
                 </Button>
               </div>
             </div>
@@ -561,19 +588,21 @@ export default function GuestRecordingInterface() {
                             <div className="text-xs text-gray-500 whitespace-nowrap flex items-center gap-1">
                               <button 
                                 onClick={() => playWord('user', wf.user_start_s, wf.user_end_s)}
-                                className="hover:text-amber-600 hover:bg-amber-100 px-1 py-0.5 rounded transition-colors"
+                                className="bg-white border border-gray-200 shadow-sm px-1.5 py-0.5 rounded-md text-gray-700 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1"
                                 title="Play your pronunciation"
                                 type="button"
                               >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-gray-400 group-hover:text-amber-500"><path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" /></svg>
                                 {wf.user_duration_s.toFixed(2)}s
                               </button> 
-                              <span>vs</span> 
+                              <span className="text-gray-400 px-1">vs</span> 
                               <button 
                                 onClick={() => playWord('ref', wf.ref_start_s, wf.ref_end_s)}
-                                className="hover:text-amber-600 hover:bg-amber-100 px-1 py-0.5 rounded transition-colors"
+                                className="bg-white border border-gray-200 shadow-sm px-1.5 py-0.5 rounded-md text-gray-700 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 group"
                                 title="Play Sheikh's pronunciation"
                                 type="button"
                               >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-gray-400 group-hover:text-amber-500"><path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" /></svg>
                                 {wf.ref_duration_s.toFixed(2)}s
                               </button>
                             </div>
