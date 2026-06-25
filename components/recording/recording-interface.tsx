@@ -18,6 +18,7 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("record")
   const [isDragOver, setIsDragOver] = useState(false)
@@ -39,6 +40,23 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
       }
     }
   }, [audioUrl])
+
+  useEffect(() => {
+    let progressTimer: NodeJS.Timeout;
+    if (isProcessing) {
+      progressTimer = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 100) return 100;
+          return prev + (100 / 300);
+        });
+      }, 1000);
+    } else {
+      setProgress(0);
+    }
+    return () => {
+      if (progressTimer) clearInterval(progressTimer);
+    };
+  }, [isProcessing])
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -152,6 +170,7 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
     if (!audioBlob) return
 
     setIsProcessing(true)
+    setProgress(0)
     setError(null)
 
     try {
@@ -342,18 +361,26 @@ export default function RecordingInterface({ userId }: RecordingInterfaceProps) 
                   Discard
                 </Button>
 
-                <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={saveRecording} disabled={isProcessing}>
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save & Analyze
-                    </>
+                <Button className="relative overflow-hidden bg-emerald-600 hover:bg-emerald-700 text-white" onClick={saveRecording} disabled={isProcessing}>
+                  {isProcessing && (
+                    <div 
+                      className="absolute inset-y-0 left-0 bg-emerald-800 transition-all duration-1000 ease-linear" 
+                      style={{ width: `${progress}%` }}
+                    />
                   )}
+                  <span className="relative z-10 flex items-center justify-center">
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save & Analyze
+                      </>
+                    )}
+                  </span>
                 </Button>
               </div>
             </div>

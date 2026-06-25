@@ -15,125 +15,93 @@ export const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
-/**
- * Process recorded audio for reciter matching
- * @param audioBlob The recorded audio or uploaded file as a Blob
- * @returns Matching results from the API
- */
-export async function processRecitation(audioBlob: Blob) {
-  try {
-    // Convert the blob to base64
-    const audioBase64 = await blobToBase64(audioBlob);
-    
-    // Get audio type from the blob
-    // Default to audio/mpeg for recorded audio
-    const audioType = audioBlob.type || 'audio/mpeg';
-    
-    // Send directly to the Cloud Run API endpoint to bypass Next.js API timeouts
-    const cloudRunUrl = process.env.NEXT_PUBLIC_GCP_CLOUD_RUN_URL;
-    let response;
-    
-    if (cloudRunUrl) {
-      response = await fetch(`${cloudRunUrl}/process`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          input: {
-            audio_b64: audioBase64,
-            top_k: 5
-          }
-        })
-      });
-    } else {
-      // Fallback to Next.js API route if Cloud Run URL is not configured
-      response = await fetch('/api/process-recitation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audio: audioBase64,
-          audioType: audioType
-        })
-      });
-    }
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API error (${response.status}): ${errorText}`);
-    }
-    
-    // Parse the response
-    const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(data.error);
-    }
-    
-    // Transform the data to match the expected format in the frontend depending on where it came from
-    let matchResults = [];
-    
-    if (cloudRunUrl) {
-      // Data directly from Cloud Run
-      const mappedPredictions = data.rankings.map((r: any) => ({
-        speaker: r.name,
-        confidence: r.score
-      }));
-      
-      // Need to simulate the reciter data transformation that usually happens in route.ts
-      matchResults = mappedPredictions.map((prediction: any, index: number) => ({
-        reciterId: `prediction_${index}`,
-        reciterName: prediction.speaker,
-        recitationStyle: prediction.speaker,
-        similarityScore: prediction.confidence * 100, // Convert to percentage
-        aspectScores: transformAspectScores({
-          intonation: prediction.confidence * 0.95,
-          pace: prediction.confidence * 0.92,
-          melody: prediction.confidence * 0.88,
-          strength: prediction.confidence * 0.90,
-          articulation: prediction.confidence * 0.94,
-          fluency: prediction.confidence * 0.89,
-          rhythm: prediction.confidence * 0.91
-        })
-      }));
-    } else {
-      // Data from Next.js API route
-      matchResults = data.matches.map((match: any) => ({
-        reciterId: match.id,
-        reciterName: match.name,
-        recitationStyle: match.style,
-        similarityScore: match.similarity_score * 100, // Convert to percentage
-        aspectScores: transformAspectScores(match.aspect_scores || {})
-      }));
-    }
-    
-    // Sort by similarity score
-    matchResults.sort((a: any, b: any) => b.similarityScore - a.similarityScore);
-    
-    // Get the best match
-    const bestMatch = matchResults.length > 0 ? matchResults[0] : null;
-    
-    // Generate feedback
-    const generalFeedback = bestMatch ? [
-      `Your recitation most closely matches ${bestMatch.reciterName} (${Math.round(bestMatch.similarityScore)}% match)`,
-      `You excel in ${findStrongestAspect(bestMatch.aspectScores)}`,
-      `For improvement, focus on your ${findWeakestAspect(bestMatch.aspectScores)}`
-    ] : [];
-    
-    return {
-      bestMatch,
-      matchResults,
-      generalFeedback,
-      featureInfo: data.feature_info,
-      wordFeedback: data.word_feedback || [],
-      refAudioUrl: data.ref_audio_url || null
-    };
-  } catch (error) {
-    console.error('Error processing recitation:', error);
-    throw error;
-  }
+export async function submitRecording(audioBlob: Blob, userId: string = "guest"): Promise<string> {
+  const base64 = await blobToBase64(audioBlob);
+  const cloudRunUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!cloudRunUrl) throw new Error("Missing NEXT_PUBLIC_API_URL in environment");
+  
+  const res = await fetch(`${cloudRunUrl}/submit-recording`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audio_data: base64, user_id: userId }),
+  });
+  if (!res.ok) throw new Error("Submit failed");
+  const { job_id } = await res.json();
+  return job_id;
+}
+
+export async function pollJobStatus(
+  jobId: string,
+  onStatusChange: (status: string) => void,
+  intervalMs = 3000,
+  timeoutMs = 300_000
+): Promise<any> {
+  const cloudRunUrl = process.env.NEXT_PUBLIC_API_URL;
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const interval = setInterval(async () => {
+      if (Date.now() - start > timeoutMs) {
+        clearInterval(interval);
+        reject(new Error("Timed out waiting for result"));
+        return;
+      }
+      try {
+        const res = await fetch(`${cloudRunUrl}/job-status/${jobId}`);
+        const data = await res.json();
+        onStatusChange(data.status);
+        if (data.status === "done") {
+          clearInterval(interval);
+          resolve(formatBackendResult(data.result));
+        } else if (data.status === "error") {
+          clearInterval(interval);
+          reject(new Error(data.error || "Processing failed"));
+        }
+      } catch (e) {
+        // network blip — keep polling
+      }
+    }, intervalMs);
+  });
+}
+
+function formatBackendResult(data: any) {
+  const mappedPredictions = data.rankings.map((r: any) => ({
+    speaker: r.name,
+    confidence: r.score
+  }));
+  
+  const matchResults = mappedPredictions.map((prediction: any, index: number) => ({
+    reciterId: `prediction_${index}`,
+    reciterName: prediction.speaker,
+    recitationStyle: prediction.speaker,
+    similarityScore: prediction.confidence * 100, // Convert to percentage
+    aspectScores: transformAspectScores({
+      intonation: prediction.confidence * 0.95,
+      pace: prediction.confidence * 0.92,
+      melody: prediction.confidence * 0.88,
+      strength: prediction.confidence * 0.90,
+      articulation: prediction.confidence * 0.94,
+      fluency: prediction.confidence * 0.89,
+      rhythm: prediction.confidence * 0.91
+    })
+  }));
+  
+  matchResults.sort((a: any, b: any) => b.similarityScore - a.similarityScore);
+  const bestMatch = matchResults.length > 0 ? matchResults[0] : null;
+  
+  const generalFeedback = bestMatch ? [
+    `Your recitation most closely matches ${bestMatch.reciterName} (${Math.round(bestMatch.similarityScore)}% match)`,
+    `You excel in ${findStrongestAspect(bestMatch.aspectScores)}`,
+    `For improvement, focus on your ${findWeakestAspect(bestMatch.aspectScores)}`
+  ] : [];
+  
+  return {
+    bestMatch,
+    matchResults,
+    generalFeedback,
+    featureInfo: data.feature_info,
+    wordFeedback: data.word_feedback || [],
+    refAudioUrl: data.ref_audio_url || null
+  };
 }
 
 /**

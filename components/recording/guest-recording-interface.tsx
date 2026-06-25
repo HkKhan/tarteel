@@ -7,7 +7,7 @@ import { Mic, Save, Trash2, Loader2, Upload } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { processRecitation } from "@/lib/audio/recorder";
+import { submitRecording, pollJobStatus } from "@/lib/audio/recorder";
 
 // Define the types for our feedback and match results
 interface AspectFeedback {
@@ -48,6 +48,7 @@ export default function GuestRecordingInterface() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [refAudioUrl, setRefAudioUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("Processing...");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("record");
@@ -268,7 +269,12 @@ export default function GuestRecordingInterface() {
 
     try {
       // Use our new utility function to process the recording
-      const responseData = await processRecitation(audioBlob);
+      const jobId = await submitRecording(audioBlob);
+      const responseData = await pollJobStatus(jobId, (status) => {
+        if (status === "queued") setStatusMessage("Queued for processing...");
+        else if (status === "processing") setStatusMessage("Analysing recitation (GPU)...");
+        else setStatusMessage("Finishing up...");
+      });
 
       // Update the state with the results
       if (responseData.bestMatch && responseData.matchResults) {
@@ -465,8 +471,8 @@ export default function GuestRecordingInterface() {
                   <span className="relative z-10 flex items-center justify-center">
                     {isProcessing ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing...
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        {statusMessage}
                       </>
                     ) : (
                       <>
@@ -588,21 +594,21 @@ export default function GuestRecordingInterface() {
                             <div className="text-xs text-gray-500 whitespace-nowrap flex items-center gap-1">
                               <button 
                                 onClick={() => playWord('user', wf.user_start_s, wf.user_end_s)}
-                                className="bg-white border border-gray-200 shadow-sm px-1.5 py-0.5 rounded-md text-gray-700 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1"
+                                className="bg-emerald-50 border border-emerald-200 shadow-sm px-2 py-1 rounded-md text-emerald-700 hover:text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100 font-medium active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 group"
                                 title="Play your pronunciation"
                                 type="button"
                               >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-gray-400 group-hover:text-amber-500"><path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-emerald-500 group-hover:text-emerald-700"><path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" /></svg>
                                 {wf.user_duration_s.toFixed(2)}s
                               </button> 
                               <span className="text-gray-400 px-1">vs</span> 
                               <button 
                                 onClick={() => playWord('ref', wf.ref_start_s, wf.ref_end_s)}
-                                className="bg-white border border-gray-200 shadow-sm px-1.5 py-0.5 rounded-md text-gray-700 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 group"
+                                className="bg-blue-50 border border-blue-200 shadow-sm px-2 py-1 rounded-md text-blue-700 hover:text-blue-800 hover:border-blue-300 hover:bg-blue-100 font-medium active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 group"
                                 title="Play Sheikh's pronunciation"
                                 type="button"
                               >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-gray-400 group-hover:text-amber-500"><path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-500 group-hover:text-blue-700"><path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" /></svg>
                                 {wf.ref_duration_s.toFixed(2)}s
                               </button>
                             </div>
